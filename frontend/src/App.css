@@ -1,0 +1,112 @@
+
+/* ---------- Cài đặt nền tảng nhẹ ---------- */
+:root {
+  color-scheme: light dark; /* đồng bộ hệ điều hành */
+}
+
+/* Smooth scroll cho trải nghiệm điều hướng tốt hơn */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Nền tổng thể khớp với app (bg-gray-50 trong UI) */
+body {
+  background-color: #f9fafb; /* tương đương tailwind bg-gray-50 */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ĐỪNG giới hạn #root nữa; để layout tự xử lý bằng container tailwind */
+#root {
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  text-align: initial; /* không ép center toàn cục */
+}
+
+/* ---------- A11y & focus ---------- */
+*:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.35); /* ring-blue-400/40 */
+  outline-offset: 2px;
+}
+
+/* ---------- Scrollbar gọn nhẹ (tùy chọn) ---------- */
+@media (pointer: fine) {
+  /* WebKit */
+  *::-webkit-scrollbar {
+    height: 10px;
+    width: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: rgba(100, 116, 139, 0.35); /* slate-500/35 */
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(100, 116, 139, 0.55);
+  }
+}
+
+/* ---------- Tiện ích nhỏ dùng trong app ---------- */
+/* Chống scroll anchoring khi nội dung phía trên thay đổi chiều cao */
+.no-scroll-anchor {
+  overflow-anchor: none;
+}
+
+/* Ẩn scrollbar nhưng vẫn scroll được (dùng cho list nhỏ nếu muốn) */
+.hide-scrollbar {
+  scrollbar-width: none;          /* Firefox */
+}
+.hide-scrollbar::-webkit-scrollbar { /* WebKit */
+  display: none;
+}
+
+/* Reset nút dạng icon nếu cần (tránh style mặc định của browser) */
+.btn-icon {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid rgb(229 231 235); /* gray-200 */
+  background: #fff;
+  border-radius: 0.375rem; /* rounded-md */
+  width: 2.25rem;  /* w-9 */
+  height: 2.25rem; /* h-9 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgb(75 85 99); /* gray-600 */
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.btn-icon:hover {
+  background: rgb(249 250 251); /* gray-50 */
+}
+.btn-icon:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Badge nhẹ nhàng (nếu muốn dùng ngoài Tailwind) */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;     /* py-0.5 px-2 */
+  font-size: 0.75rem;           /* text-xs */
+  font-weight: 500;
+  color: rgb(17 24 39);         /* gray-900 */
+  background: rgb(243 244 246); /* gray-100 */
+  border: 1px solid rgb(229 231 235); /* gray-200 */
+  border-radius: 0.375rem;      /* rounded-md */
+}
+
+/* ---------- Dọn rác demo Vite (KHÔNG CẦN NỮA) ----------
+.logo {}
+.logo:hover {}
+.logo.react:hover {}
+@keyframes logo-spin {}
+.card {}
+.read-the-docs {}
+------------------------------------------------------ */
