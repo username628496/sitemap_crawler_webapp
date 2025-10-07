@@ -3,6 +3,7 @@ import Header from './components/Header'
 import CrawlForm from './components/CrawlForm'
 import CrawlResults from './components/CrawlResults'
 import HistorySection from './components/HistorySection'
+import WelcomePopup from './components/WelcomePopup'
 import Footer from './components/Footer' // UI bản 2
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header (UI bản 2) */}
+      <WelcomePopup />
       <div className="bg-transparent">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <Header />
