@@ -1,226 +1,185 @@
 import requests
 import xml.etree.ElementTree as ET
-from xml.etree.ElementTree import ParseError
-from typing import List, Set, Optional
-import sys
-import os
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+from urllib.parse import urljoin
+from typing import List, Tuple, Set
+from time import time, sleep
 from config import Config
 from utils.logger import logger
 
 class SitemapParser:
     def __init__(self):
-        self.config = Config()
-    
-    def fetch_url(self, url: str, timeout: int = None) -> Optional[str]:
-        """Fetch URL content with error handling"""
-        if timeout is None:
-            timeout = self.config.REQUEST_TIMEOUT
-        
-        try:
-            response = requests.get(
-                url, 
-                headers=self.config.REQUEST_HEADERS,
-                timeout=timeout
-            )
-            response.raise_for_status()
-            
-            # Handle encoding
-            response.encoding = response.apparent_encoding
-            return response.text
-            
-        except requests.exceptions.HTTPError as e:
-            if response.status_code == 403:
-                raise Exception(f"403 Forbidden – Trang từ chối truy cập: {url}")
-            elif response.status_code == 404:
-                raise Exception(f"404 Not Found – Không tìm thấy: {url}")
-            else:
-                raise Exception(f"Lỗi HTTP {response.status_code} – {url}")
-                
-        except requests.exceptions.Timeout:
-            raise Exception(f"Timeout – Không thể kết nối trong {timeout}s: {url}")
-            
-        except requests.exceptions.ConnectionError:
-            raise Exception(f"Connection Error – Không thể kết nối: {url}")
-            
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"Request Error – {url}: {str(e)}")
-    
-    def is_valid_xml(self, text: str) -> bool:
-        """Check if text is valid XML"""
-        if not text or not text.strip():
-            return False
-        
-        try:
-            ET.fromstring(text.encode('utf-8'))
-            return True
-        except (ParseError, UnicodeEncodeError):
-            return False
-    
-    def parse_sitemap(self, url: str, visited_sitemaps: Set[str] = None, depth: int = 0) -> List[str]:
+        self.headers = Config.REQUEST_HEADERS
+        self.timeout = Config.REQUEST_TIMEOUT
+        self.max_depth = Config.MAX_SITEMAP_DEPTH
+
+    # -------------------------------
+    # Helper: Safe fetch with retries
+    # -------------------------------
+    def fetch_url(self, url: str, retries: int = 3) -> str:
         """
-        Parse sitemap with recursion protection
-        
-        Args:
-            url: Sitemap URL to parse
-            visited_sitemaps: Set of already visited sitemaps
-            depth: Current recursion depth
-            
-        Returns:
-            List of URLs found in sitemap
+        Fetch content from URL with auto-retry and SSL fallback.
+        Returns response text or raises exception.
         """
-        if visited_sitemaps is None:
-            visited_sitemaps = set()
-        
-        # Prevent infinite recursion
-        if depth >= self.config.MAX_SITEMAP_DEPTH:
-            logger.warning(f"Max sitemap depth reached for {url}")
-            return []
-        
-        # Check if already visited
-        if url in visited_sitemaps:
-            logger.debug(f"Sitemap already visited: {url}")
-            return []
-        
-        visited_sitemaps.add(url)
-        urls = []
-        
-        try:
-            xml_data = self.fetch_url(url)
-            if not xml_data:
-                raise Exception("Không tải được sitemap")
-            
-            # Parse XML
+        for attempt in range(1, retries + 1):
             try:
-                root = ET.fromstring(xml_data.encode('utf-8'))
-            except UnicodeEncodeError:
-                # Try with different encoding
-                root = ET.fromstring(xml_data.encode('latin-1'))
-            
-            # Define namespace
-            ns = {'ns': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
-            
-            # Extract URLs
-            for loc in root.findall('.//ns:url/ns:loc', ns):
-                link = loc.text
-                if link:
-                    link = link.strip()
-                    # Filter out sitemap files from results
-                    if not self._is_sitemap_file(link):
-                        urls.append(link)
-            
-            # Process nested sitemaps recursively
-            for sitemap in root.findall('.//ns:sitemap/ns:loc', ns):
-                sitemap_url = sitemap.text
-                if sitemap_url:
-                    sitemap_url = sitemap_url.strip()
+                res = requests.get(
+                    url,
+                    headers=self.headers,
+                    timeout=self.timeout,
+                    allow_redirects=True,
+                    verify=True  # SSL verification ON
+                )
+                res.raise_for_status()
+                logger.info(f"✅ Fetch thành công ({res.status_code}) {url}")
+                return res.text
+
+            except requests.exceptions.SSLError as e:
+                logger.warning(f"⚠️ SSL Error khi fetch {url}: {e}")
+                if attempt == retries:
+                    logger.warning(f"⏩ Bỏ verify SSL và thử lại lần cuối: {url}")
                     try:
-                        nested_urls = self.parse_sitemap(
-                            sitemap_url, 
-                            visited_sitemaps.copy(),
-                            depth + 1
+                        res = requests.get(
+                            url,
+                            headers=self.headers,
+                            timeout=self.timeout,
+                            allow_redirects=True,
+                            verify=False  # fallback SSL verify off
                         )
-                        urls.extend(nested_urls)
-                    except Exception as e:
-                        logger.warning(f"Could not parse nested sitemap {sitemap_url}: {e}")
-                        continue
-            
-            logger.info(f"Parsed {len(urls)} URLs from {url}")
-            return urls
-            
-        except ParseError as e:
-            raise Exception(f"XML lỗi: {str(e)}")
-        except Exception as e:
-            raise Exception(str(e))
-    
-    def _is_sitemap_file(self, url: str) -> bool:
-        """Check if URL is a sitemap file"""
-        url_lower = url.lower()
-        return any(pattern in url_lower for pattern in [
-            'sitemap.xml',
-            'sitemap_index.xml',
-            'sitemap-index.xml',
-            '/sitemap/',
-            'sitemaps.xml'
-        ])
-    
-    def discover_sitemaps(self, domain: str) -> List[str]:
+                        res.raise_for_status()
+                        return res.text
+                    except Exception as e2:
+                        raise Exception(f"SSL fallback thất bại: {e2}")
+
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"⚠️ fetch_url thất bại ({attempt}/{retries}) cho {url}: {e}")
+                if attempt < retries:
+                    sleep(1.5 * attempt)
+                else:
+                    raise Exception(f"Không thể tải {url} sau {retries} lần thử: {e}")
+
+        raise Exception(f"fetch_url không thành công sau {retries} lần thử: {url}")
+
+    # -------------------------------
+    # Tìm sitemap trong robots.txt
+    # -------------------------------
+    def discover_sitemaps(self, domain: str) -> Tuple[List[str], str]:
         """
-        Discover sitemaps for a domain
-        
-        Args:
-            domain: Domain to search (without protocol)
-            
-        Returns:
-            List of discovered sitemap URLs
+        Discover sitemap URLs for a domain.
+        Returns (list_of_sitemaps, final_domain)
         """
-        def try_fetch_domain(domain_variant: str) -> List[str]:
-            found_sitemaps = []
-            
-            # Try robots.txt first
+        logger.info(f"🚀 Bắt đầu crawl domain: {domain}")
+        candidates = [
+            f"https://{domain}/robots.txt",
+            f"https://{domain}/sitemap.xml",
+            f"https://{domain}/sitemap_index.xml",
+            f"https://{domain}/sitemap-index.xml",
+            f"https://{domain}/wp-sitemap.xml",
+            f"https://{domain}/post-sitemap.xml",
+        ]
+
+        sitemaps_found = []
+        final_domain = None
+
+        for url in candidates:
             try:
-                robots_url = f"https://{domain_variant}/robots.txt"
-                robots_txt = self.fetch_url(robots_url)
-                
-                if robots_txt:
-                    for line in robots_txt.splitlines():
-                        line = line.strip()
-                        if line.lower().startswith('sitemap:'):
-                            sitemap_url = line.split(':', 1)[1].strip()
+                content = self.fetch_url(url)
+                if "sitemap" in url and self.is_valid_xml(content):
+                    logger.info(f"✅ Tìm thấy sitemap tại: {url}")
+                    sitemaps_found.append(url)
+                    final_domain = domain
+                    continue
+
+                # robots.txt special case
+                if "robots.txt" in url and "Sitemap:" in content:
+                    for line in content.splitlines():
+                        if line.lower().startswith("sitemap:"):
+                            sm_url = line.split(":", 1)[1].strip()
+                            if sm_url.startswith("/"):
+                                sm_url = urljoin(f"https://{domain}", sm_url)
+                            logger.info(f"📜 Phát hiện sitemap trong robots.txt: {sm_url}")
                             try:
-                                content = self.fetch_url(sitemap_url)
-                                if content and self.is_valid_xml(content):
-                                    found_sitemaps.append(sitemap_url)
-                                    logger.info(f"Found sitemap in robots.txt: {sitemap_url}")
+                                xml_data = self.fetch_url(sm_url)
+                                if self.is_valid_xml(xml_data):
+                                    sitemaps_found.append(sm_url)
+                                    final_domain = domain
                             except Exception as e:
-                                logger.debug(f"Sitemap from robots.txt not accessible: {sitemap_url}")
+                                logger.warning(f"⚠️ Không thể tải sitemap từ robots.txt {sm_url}: {e}")
+
             except Exception as e:
-                logger.debug(f"Could not fetch robots.txt for {domain_variant}: {e}")
-            
-            # Try common sitemap paths
-            if not found_sitemaps:
-                common_paths = [
-                    'sitemap.xml',
-                    'sitemap_index.xml',
-                    'sitemap-index.xml',
-                    'sitemap1.xml',
-                    'wp-sitemap.xml',
-                    'post-sitemap.xml'
-                ]
-                
-                for path in common_paths:
-                    try:
-                        url = f"https://{domain_variant}/{path}"
-                        content = self.fetch_url(url)
-                        if content and self.is_valid_xml(content):
-                            found_sitemaps.append(url)
-                            logger.info(f"Found sitemap at common path: {url}")
-                            break  # Stop after finding first valid sitemap
-                    except Exception:
-                        continue
-            
-            return found_sitemaps
-        
-        # Clean domain
-        domain = domain.replace('https://', '').replace('http://', '').strip('/')
-        
-        # Try domain as entered
-        sitemaps = try_fetch_domain(domain)
-        
-        # If not found and doesn't start with www, try with www
-        if not sitemaps and not domain.startswith('www.'):
-            www_domain = f"www.{domain}"
-            sitemaps = try_fetch_domain(www_domain)
-            if sitemaps:
-                logger.info(f"Found sitemaps using www variant: {www_domain}")
-        
-        # If not found and starts with www, try without www
-        if not sitemaps and domain.startswith('www.'):
-            non_www_domain = domain.replace('www.', '', 1)
-            sitemaps = try_fetch_domain(non_www_domain)
-            if sitemaps:
-                logger.info(f"Found sitemaps using non-www variant: {non_www_domain}")
-        
-        return sitemaps
+                logger.warning(f"⚠️ Không thể fetch {url}: {e}")
+                continue
+
+        # thử thêm www nếu chưa có sitemap
+        if not sitemaps_found and not domain.startswith("www."):
+            try:
+                www_domain = f"www.{domain}"
+                logger.info(f"🔁 Thử lại với www: {www_domain}")
+                sitemaps_found, final_domain = self.discover_sitemaps(www_domain)
+            except Exception as e:
+                logger.warning(f"⚠️ Không thể crawl www domain: {e}")
+
+        if not sitemaps_found:
+            logger.warning(f"⚠️ Không tìm thấy sitemap cho {domain}")
+            raise Exception("Không tìm thấy sitemap hợp lệ")
+
+        logger.info(f"🔍 Tìm thấy {len(sitemaps_found)} sitemap cho {domain}")
+        return list(set(sitemaps_found)), final_domain
+
+    # -------------------------------
+    # Xác định sitemap hợp lệ
+    # -------------------------------
+    def is_valid_xml(self, text: str) -> bool:
+        try:
+            ET.fromstring(text)
+            return True
+        except ET.ParseError:
+            return False
+
+    # -------------------------------
+    # Đệ quy parse sitemap
+    # -------------------------------
+    def parse_sitemap(self, sitemap_url: str, visited: Set[str] = None, depth: int = 0) -> List[str]:
+        """
+        Parse XML sitemap and return list of URLs.
+        Supports nested sitemap indexes.
+        """
+        if visited is None:
+            visited = set()
+        if sitemap_url in visited:
+            return []
+        if depth > self.max_depth:
+            logger.warning(f"⚠️ Quá độ sâu cho sitemap: {sitemap_url}")
+            return []
+
+        visited.add(sitemap_url)
+        logger.info(f"📥 Đang parse sitemap: {sitemap_url}")
+
+        try:
+            xml_data = self.fetch_url(sitemap_url)
+        except Exception as e:
+            raise Exception(f"Lỗi tải sitemap: {e}")
+
+        urls = []
+        try:
+            root = ET.fromstring(xml_data)
+            ns = {"ns": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+
+            # URL set
+            for loc in root.findall(".//ns:url/ns:loc", ns):
+                if loc.text:
+                    urls.append(loc.text.strip())
+
+            # Nested sitemaps
+            for sm in root.findall(".//ns:sitemap/ns:loc", ns):
+                nested_url = sm.text.strip()
+                if nested_url not in visited:
+                    nested_urls = self.parse_sitemap(nested_url, visited, depth + 1)
+                    urls.extend(nested_urls)
+
+            logger.info(f"✅ Parsed {len(urls)} URLs từ {sitemap_url}")
+            return list(set(urls))
+
+        except ET.ParseError as e:
+            raise Exception(f"Lỗi parse XML {sitemap_url}: {e}")
+        except Exception as e:
+            raise Exception(f"Lỗi không xác định khi parse sitemap {sitemap_url}: {e}")
