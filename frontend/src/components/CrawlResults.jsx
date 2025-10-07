@@ -23,13 +23,10 @@ const CrawlResults = ({ results, onRefreshHistory }) => {
 
   const successfulCrawls = results.filter(r => r?.status === 'success')
 
-  const totalUrls = successfulCrawls.reduce((sum, r) => {
-    if (!Array.isArray(r?.sitemaps)) return sum
-    return sum + r.sitemaps.reduce((s, sm) => s + (sm?.urls?.length || 0), 0)
-  }, 0)
+  const totalUrls = successfulCrawls.reduce((sum, r) => sum + (r?.total_urls || 0), 0)
 
-  // 2 credit cho 1 URL
-  const estimatedCredits = totalUrls * 2
+  // 3 credit cho 1 URL
+  const estimatedCredits = totalUrls * 3
 
   return (
     <section id="crawl-results" className="space-y-3 scroll-mt-6">
