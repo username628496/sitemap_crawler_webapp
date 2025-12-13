@@ -67,10 +67,18 @@ class RedirectTracker:
         url: str,
         headers: dict,
         timeout: int,
-        verify: bool = True
+        verify: bool = True,
+        proxies: dict = None
     ) -> Tuple[requests.Response, RedirectChain]:
         """
         Fetch URL and track complete redirect chain.
+
+        Args:
+            url: URL to fetch
+            headers: Request headers
+            timeout: Request timeout in seconds
+            verify: SSL verification (True/False)
+            proxies: Optional proxy configuration dict
 
         Returns:
             Tuple of (final_response, redirect_chain)
@@ -110,7 +118,8 @@ class RedirectTracker:
                     headers=headers,
                     timeout=timeout,
                     allow_redirects=False,  # Manual redirect handling
-                    verify=verify
+                    verify=verify,
+                    proxies=proxies
                 )
             except Exception as e:
                 raise Exception(f"Request failed at {current_url}: {e}")
@@ -197,6 +206,14 @@ class SitemapParser:
         self.session = requests.Session()
         self.session.headers.update(self.headers)
 
+        # Configure proxy if enabled
+        if Config.USE_PROXY and Config.PROXIES:
+            self.session.proxies.update(Config.PROXIES)
+            proxy_info = ', '.join([f"{k}: {v.split('@')[1] if '@' in v else v}" for k, v in Config.PROXIES.items()])
+            logger.info(f"🌐 Proxy enabled: {proxy_info}")
+        else:
+            logger.info("📡 Direct connection (no proxy)")
+
     def _rotate_user_agent(self):
         """Rotate to next user agent"""
         self.current_ua_index = (self.current_ua_index + 1) % len(self.user_agents)
@@ -229,7 +246,8 @@ class SitemapParser:
                         url,
                         self.headers,
                         self.timeout,
-                        verify=False  # SSL verification OFF (many domains have invalid certs)
+                        verify=False,  # SSL verification OFF (many domains have invalid certs)
+                        proxies=Config.PROXIES if Config.USE_PROXY else None
                     )
                     response.raise_for_status()
 
@@ -274,7 +292,8 @@ class SitemapParser:
                                 url,
                                 self.headers,
                                 self.timeout,
-                                verify=False  # fallback SSL verify off
+                                verify=False,  # fallback SSL verify off
+                                proxies=Config.PROXIES if Config.USE_PROXY else None
                             )
                             response.raise_for_status()
 
