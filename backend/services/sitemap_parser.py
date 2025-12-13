@@ -187,14 +187,23 @@ class RedirectTracker:
 # ============================================================
 class SitemapParser:
     def __init__(self):
-        self.headers = Config.REQUEST_HEADERS
+        self.headers = Config.REQUEST_HEADERS.copy()
         self.timeout = Config.REQUEST_TIMEOUT
         self.max_depth = Config.MAX_SITEMAP_DEPTH
         self.redirect_tracker = RedirectTracker(max_redirects=10)
-        # Use regular session with Googlebot UA
-        # Most sites allow Googlebot to access sitemaps
+        self.user_agents = Config.USER_AGENTS
+        self.current_ua_index = 0
+        # Use session with rotating user agents
         self.session = requests.Session()
         self.session.headers.update(self.headers)
+
+    def _rotate_user_agent(self):
+        """Rotate to next user agent"""
+        self.current_ua_index = (self.current_ua_index + 1) % len(self.user_agents)
+        new_ua = self.user_agents[self.current_ua_index]
+        self.headers['User-Agent'] = new_ua
+        self.session.headers['User-Agent'] = new_ua
+        logger.info(f"🔄 Rotated to UA: {new_ua[:50]}...")
 
     # -------------------------------
     # Helper: Safe fetch with retries and redirect tracking
@@ -290,9 +299,14 @@ class SitemapParser:
                         raise Exception(f"SSL fallback thất bại: {e2}")
 
             except requests.exceptions.RequestException as e:
+                # Check if 403 Forbidden - rotate user agent
+                if "403" in str(e) or "Forbidden" in str(e):
+                    logger.warning(f"⚠️ 403 Forbidden - rotating user agent...")
+                    self._rotate_user_agent()
+
                 logger.warning(f"⚠️ fetch_url thất bại ({attempt}/{retries}) cho {url}: {e}")
                 if attempt < retries:
-                    # Random delay để tránh Cloudflare bot detection
+                    # Random delay để tránh bot detection
                     import random
                     delay = 2.0 + random.uniform(0, 2.0)  # 2-4 seconds random
                     sleep(delay)

@@ -14,15 +14,32 @@ class Config:
     REQUEST_TIMEOUT = 15          # tăng timeout để tránh lỗi Connection Reset
     MAX_SITEMAP_DEPTH = 10        # giữ nguyên để crawl sâu sitemap_index.xml
 
-    # User agent (giả lập Googlebot để vượt bot detection)
-    # Websites allow Googlebot to crawl sitemaps
-    USER_AGENT = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+    # Multiple user agents to rotate (bypass bot detection)
+    USER_AGENTS = [
+        # Googlebot
+        "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+        # Bingbot
+        "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
+        # Chrome on Windows
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        # Chrome on Mac
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        # Firefox
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0",
+    ]
 
-    # Request headers (giả lập Googlebot - minimal headers)
+    # Default user agent (will be rotated)
+    USER_AGENT = USER_AGENTS[0]
+
+    # Request headers (minimal to look like real browser)
     REQUEST_HEADERS = {
         "User-Agent": USER_AGENT,
-        "Accept": "*/*",
-        "Accept-Encoding": "gzip, deflate",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "DNT": "1",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
     }
 
     # History settings
