@@ -83,21 +83,23 @@ class AsyncSitemapCrawler:
         self.timeout = timeout
         self.max_urls_per_domain = max_urls_per_domain
         self.max_redirects = max_redirects
-        self.semaphore = asyncio.Semaphore(max_concurrent)
-
-        # HTTP client with HTTP/2 and connection pooling
-        self.client = httpx.AsyncClient(
-            timeout=httpx.Timeout(timeout),
-            limits=httpx.Limits(
-                max_connections=max_concurrent,
-                max_keepalive_connections=max_concurrent // 2
-            ),
-            http2=True,
-            verify=False,  # Disable SSL verification
-            follow_redirects=False  # Manual redirect handling
-        )
+        self.client = None  # Will be created in async context
 
         logger.info(f"✅ AsyncSitemapCrawler initialized: {max_concurrent} concurrent, HTTP/2 enabled")
+
+    async def _ensure_client(self):
+        """Ensure HTTP client exists in current event loop"""
+        if self.client is None or self.client.is_closed:
+            self.client = httpx.AsyncClient(
+                timeout=httpx.Timeout(self.timeout),
+                limits=httpx.Limits(
+                    max_connections=self.max_concurrent,
+                    max_keepalive_connections=self.max_concurrent // 2
+                ),
+                http2=True,
+                verify=False,
+                follow_redirects=False
+            )
 
     async def close(self):
         """Close HTTP client"""
@@ -113,10 +115,16 @@ class AsyncSitemapCrawler:
         Returns:
             Tuple of (response_text, redirect_chain)
         """
+        await self._ensure_client()  # Ensure client exists
+
         chain_start = time()
         hops = []
         visited_urls = set()
         current_url = url
+
+        # Create semaphore in current event loop if needed
+        if not hasattr(self, 'semaphore') or self.semaphore is None:
+            self.semaphore = asyncio.Semaphore(self.max_concurrent)
 
         async with self.semaphore:  # Limit concurrent requests
             for redirect_count in range(self.max_redirects + 1):
@@ -272,6 +280,8 @@ class AsyncSitemapCrawler:
         Returns:
             Tuple of (sitemap_urls, final_domain)
         """
+        await self._ensure_client()  # Ensure client exists
+
         # Try without www first
         if not domain.startswith('http'):
             domain = f"https://{domain}"
