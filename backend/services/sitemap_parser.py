@@ -191,15 +191,9 @@ class SitemapParser:
         self.timeout = Config.REQUEST_TIMEOUT
         self.max_depth = Config.MAX_SITEMAP_DEPTH
         self.redirect_tracker = RedirectTracker(max_redirects=10)
-        # Use cloudscraper to bypass Cloudflare protection
-        # cloudscraper automatically solves Cloudflare challenges
-        self.session = cloudscraper.create_scraper(
-            browser={
-                'browser': 'chrome',
-                'platform': 'windows',
-                'desktop': True
-            }
-        )
+        # Use regular session with Googlebot UA
+        # Most sites allow Googlebot to access sitemaps
+        self.session = requests.Session()
         self.session.headers.update(self.headers)
 
     # -------------------------------
