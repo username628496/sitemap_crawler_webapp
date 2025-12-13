@@ -86,66 +86,49 @@ def crawl():
 @app.route('/api/crawl-stream')
 def crawl_stream():
     """Streaming crawl endpoint with Server-Sent Events using Async Crawler"""
-    def stream_async_results(domains):
-        """Stream results from async crawler with fallback to sync"""
+    def stream_sync_results(domains):
+        """Stream results from sync crawler"""
         try:
             # Send initial progress message
             yield f"data: {json.dumps({'status': 'starting', 'message': 'Khởi động crawler...', 'total': len(domains)})}\n\n"
 
-            # Try async crawler first
-            try:
-                import asyncio
+            # Use sync crawler directly (async has issues in production)
+            sync_results = crawler_service.process_domains(domains)
 
-                # Fix "Event loop is closed" error - use new loop each time
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-                try:
-                    results = loop.run_until_complete(async_crawler.crawl_domains(domains))
-                finally:
-                    loop.close()
-            except Exception as async_error:
-                # Fallback to sync crawler if async fails
-                logger.warning(f"Async crawler failed: {async_error}, falling back to sync crawler")
-                yield f"data: {json.dumps({'status': 'fallback', 'message': 'Chuyển sang sync crawler...'})}\n\n"
-
-                # Use sync crawler
-                sync_results = crawler_service.process_domains(domains)
-
-                # Convert sync results to async result format
-                from services.async_sitemap_crawler import DomainResult, SitemapResult
-                results = []
-                for r in sync_results:
-                    if r['status'] == 'success':
-                        sitemaps = [
-                            SitemapResult(
-                                sitemap=sm['sitemap'],
-                                count=sm['count'],
-                                duration=sm['duration'],
-                                urls=sm['urls'],
-                                redirect_count=sm.get('redirect_count', 0)
-                            )
-                            for sm in r.get('sitemaps', [])
-                        ]
-                        results.append(DomainResult(
-                            domain=r['domain'],
-                            original_domain=r.get('original_domain', r['domain']),
-                            status='success',
-                            total_urls=r['total_urls'],
-                            duration=r['duration'],
-                            sitemaps=sitemaps,
-                            redirect_chains=[]
-                        ))
-                    else:
-                        results.append(DomainResult(
-                            domain=r['domain'],
-                            original_domain=r.get('original_domain', r['domain']),
-                            status='failed',
-                            total_urls=0,
-                            duration=r.get('duration', 0),
-                            sitemaps=[],
-                            error=r.get('error', 'Unknown error')
-                        ))
+            # Convert sync results to expected format
+            from services.async_sitemap_crawler import DomainResult, SitemapResult
+            results = []
+            for r in sync_results:
+                if r['status'] == 'success':
+                    sitemaps = [
+                        SitemapResult(
+                            sitemap=sm['sitemap'],
+                            count=sm['count'],
+                            duration=sm['duration'],
+                            urls=sm['urls'],
+                            redirect_count=sm.get('redirect_count', 0)
+                        )
+                        for sm in r.get('sitemaps', [])
+                    ]
+                    results.append(DomainResult(
+                        domain=r['domain'],
+                        original_domain=r.get('original_domain', r['domain']),
+                        status='success',
+                        total_urls=r['total_urls'],
+                        duration=r['duration'],
+                        sitemaps=sitemaps,
+                        redirect_chains=[]
+                    ))
+                else:
+                    results.append(DomainResult(
+                        domain=r['domain'],
+                        original_domain=r.get('original_domain', r['domain']),
+                        status='failed',
+                        total_urls=0,
+                        duration=r.get('duration', 0),
+                        sitemaps=[],
+                        error=r.get('error', 'Unknown error')
+                    ))
 
             # Stream each domain result
             for result in results:
@@ -263,7 +246,7 @@ def crawl_stream():
 
     logger.info(f"Starting async stream crawl for {len(domain_list)} domains")
 
-    return Response(stream_async_results(domain_list), content_type='text/event-stream')
+    return Response(stream_sync_results(domain_list), content_type='text/event-stream')
 
 @app.route('/api/history')
 def get_history():
