@@ -346,8 +346,11 @@ class SitemapParser:
 
         sitemaps_found = []
         final_domain = None
+        forbidden_count = 0  # Track 403 errors
+        total_attempts = 0
 
         for url in candidates:
+            total_attempts += 1
             try:
                 # Use fast path (no redirect tracking) for discovery phase
                 content, chain = self.fetch_url(url, track_redirects=False)
@@ -375,8 +378,26 @@ class SitemapParser:
                                 logger.warning(f"⚠️ Không thể tải sitemap từ robots.txt {sm_url}: {e}")
 
             except Exception as e:
-                logger.warning(f"⚠️ Không thể fetch {url}: {e}")
+                error_msg = str(e)
+                # Track 403 Forbidden errors
+                if "403" in error_msg or "Forbidden" in error_msg:
+                    forbidden_count += 1
+                    logger.warning(f"⚠️ 403 Forbidden cho {url}")
+                else:
+                    logger.warning(f"⚠️ Không thể fetch {url}: {e}")
                 continue
+
+        # Check if all attempts resulted in 403 (IP blocking)
+        if forbidden_count > 0 and forbidden_count == total_attempts:
+            logger.error(
+                f"🚫 Domain {domain} blocks datacenter IPs (403 Forbidden on all {total_attempts} attempts). "
+                f"Đã thử {len(self.user_agents)} user agents khác nhau, tất cả đều bị chặn."
+            )
+            raise Exception(
+                f"Domain {domain} chặn IP datacenter (403 Forbidden). "
+                f"Domain này yêu cầu residential proxy hoặc crawl từ IP không phải datacenter. "
+                f"Không thể bypass bằng user agent."
+            )
 
         # thử thêm www nếu chưa có sitemap
         if not sitemaps_found and not domain.startswith("www."):
