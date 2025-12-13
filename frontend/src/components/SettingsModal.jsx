@@ -25,7 +25,6 @@ const SettingsModal = ({ onClose }) => {
       onClick={handleOverlayClick}
     >
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg max-w-md w-full">
-        {/* Header */}
         <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Key size={18} className="text-blue-600 dark:text-blue-400" />
@@ -39,7 +38,6 @@ const SettingsModal = ({ onClose }) => {
           </button>
         </div>
 
-        {/* Content */}
         <div className="p-4 space-y-4">
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
@@ -50,9 +48,7 @@ const SettingsModal = ({ onClose }) => {
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder="oz30z68snk3cg64vbi84basfb7xxxxxxx"
-              className="w-full border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 text-sm 
-                         bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 
-                         focus:outline-none focus:ring-1 focus:ring-blue-400/40 transition"
+              className="w-full border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-400/40 transition"
             />
             <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
               Nhập API key từ{' '}
@@ -68,16 +64,13 @@ const SettingsModal = ({ onClose }) => {
             </p>
           </div>
 
-          {/* Info Box */}
           <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
             <p className="text-xs text-blue-800 dark:text-blue-300">
-              API key được lưu trữ an toàn trên trình duyệt và chỉ được
-              sử dụng để submit URLs lên Sinbyte.
+              API key được lưu trữ an toàn trên trình duyệt và chỉ được sử dụng để submit URLs lên Sinbyte.
             </p>
           </div>
         </div>
 
-        {/* Footer */}
         <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex gap-2">
           <button
             onClick={onClose}

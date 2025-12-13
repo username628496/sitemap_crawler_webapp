@@ -6,6 +6,7 @@ from io import StringIO
 import sys
 import os
 import requests as http_requests
+import asyncio
 
 # Add current directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -14,11 +15,25 @@ from config import config, Config
 from utils.logger import logger
 from services.crawler_service import CrawlerService
 from services.history_service import HistoryService
+from services.async_sitemap_crawler import AsyncSitemapCrawler
 from models.database import DatabaseManager
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app)
+
+# CORS configuration for production domain
+CORS(app, resources={
+    r"/api/*": {
+        "origins": [
+            "http://localhost:3001",  # Development
+            "https://sm.aeseo1.org",  # Production
+            "http://sm.aeseo1.org"    # Production (HTTP redirect)
+        ],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"],
+        "supports_credentials": True
+    }
+})
 
 # Load configuration
 app_config = config.get(os.getenv('FLASK_ENV', 'default'))
@@ -29,6 +44,14 @@ db_manager = DatabaseManager()
 crawler_service = CrawlerService(db_manager)
 history_service = HistoryService(db_manager)
 
+# Initialize Async Crawler with httpx + asyncio
+async_crawler = AsyncSitemapCrawler(
+    max_concurrent=50,
+    timeout=15.0,
+    max_urls_per_domain=100000  # Increased limit
+)
+
+logger.info("✅ Application initialized with Async Crawler (httpx + asyncio + HTTP/2)")
 logger.info("Application initialized successfully")
 
 # Routes
@@ -62,35 +85,134 @@ def crawl():
 
 @app.route('/api/crawl-stream')
 def crawl_stream():
-    """Streaming crawl endpoint with Server-Sent Events"""
-    def stream(domains):
+    """Streaming crawl endpoint with Server-Sent Events using Async Crawler"""
+    def stream_async_results(domains):
+        """Stream results from async crawler"""
         try:
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-            
-            with ThreadPoolExecutor(max_workers=Config.MAX_WORKERS) as executor:
-                futures = {executor.submit(crawler_service.process_domain, d): d for d in domains}
-                
-                for future in as_completed(futures):
-                    domain = futures[future]
-                    try:
-                        result = future.result()
-                        yield f"data: {json.dumps(result)}\n\n"
-                    except Exception as e:
-                        logger.error(f"Error processing domain {domain}: {e}")
-                        yield f"data: {json.dumps({'domain': domain, 'status': 'failed', 'error': str(e)})}\n\n"
-                        
+            # Send initial progress message
+            yield f"data: {json.dumps({'status': 'starting', 'message': 'Khởi động async crawler...', 'total': len(domains)})}\n\n"
+
+            # Run async crawler in sync context
+            import asyncio
+            results = asyncio.run(async_crawler.crawl_domains(domains))
+
+            # Stream each domain result
+            for result in results:
+                # Save to database
+                try:
+                    # Flatten URLs from all sitemaps
+                    all_urls = []
+                    for sm in result.sitemaps:
+                        all_urls.extend(sm.urls)  # Get all URLs
+
+                    # Convert async crawler redirect chains
+                    redirect_chains = []
+                    for chain in result.redirect_chains:
+                        from services.sitemap_parser import RedirectChain, RedirectHop
+                        hops = [
+                            RedirectHop(
+                                url=hop.url,
+                                status_code=hop.status_code,
+                                location=hop.location,
+                                duration=hop.duration
+                            )
+                            for hop in chain.hops
+                        ]
+                        redirect_chains.append(RedirectChain(
+                            initial_url=chain.initial_url,
+                            final_url=chain.final_url,
+                            hops=hops,
+                            total_redirects=chain.total_redirects,
+                            total_duration=chain.total_duration,
+                            has_loop=chain.has_loop,
+                            loop_at=chain.loop_at
+                        ))
+
+                    # Prepare sitemaps data for DB (store sample for display)
+                    sitemaps_data = [
+                        {
+                            'sitemap': sm.sitemap,
+                            'count': sm.count,
+                            'duration': sm.duration,
+                            'urls': sm.urls[:100]  # Store first 100 URLs per sitemap for display
+                        }
+                        for sm in result.sitemaps
+                    ]
+
+                    db_manager.save_crawl_session(
+                        domain=result.domain,
+                        original_domain=result.original_domain,
+                        status=result.status,
+                        total_urls=result.total_urls,
+                        duration=result.duration,
+                        sitemaps_data=sitemaps_data,
+                        sample_urls=all_urls[:200],  # Store first 200 URLs for display
+                        redirect_chains=redirect_chains,
+                        error_message=result.error
+                    )
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to save async crawler result to DB: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+
+                # Convert result to dict for JSON serialization
+                result_dict = {
+                    'domain': result.domain,
+                    'original_domain': result.original_domain,
+                    'status': result.status,
+                    'total_urls': result.total_urls,
+                    'duplicates_removed': result.duplicates_removed,
+                    'duration': result.duration,
+                    'sitemaps': [
+                        {
+                            'sitemap': sm.sitemap,
+                            'count': sm.count,
+                            'duration': sm.duration,
+                            'urls': sm.urls,  # Return all URLs
+                            'redirect_count': sm.redirect_count
+                        }
+                        for sm in result.sitemaps
+                    ],
+                    'redirect_info': result.redirect_info,
+                    'redirect_chains': [
+                        {
+                            'initial_url': c.initial_url,
+                            'final_url': c.final_url,
+                            'total_redirects': c.total_redirects,
+                            'total_duration': c.total_duration,
+                            'has_loop': c.has_loop,
+                            'hops': [
+                                {
+                                    'url': h.url,
+                                    'status_code': h.status_code,
+                                    'location': h.location,
+                                    'duration': h.duration
+                                }
+                                for h in c.hops
+                            ]
+                        }
+                        for c in result.redirect_chains
+                    ],
+                    'error': result.error
+                }
+
+                yield f"data: {json.dumps(result_dict)}\n\n"
+
         except Exception as e:
-            logger.error(f"Error in stream generator: {e}")
+            logger.error(f"❌ Error in async stream: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
-    
+
     domains_param = request.args.get("domains", "")
     domain_list = [d.strip() for d in domains_param.split(",") if d.strip()]
-    
+
     if not domain_list:
         return jsonify({"error": "Thiếu domain"}), 400
-    
-    logger.info(f"Starting stream crawl for {len(domain_list)} domains")
-    return Response(stream(domain_list), content_type='text/event-stream')
+
+    logger.info(f"Starting async stream crawl for {len(domain_list)} domains")
+
+    return Response(stream_async_results(domain_list), content_type='text/event-stream')
 
 @app.route('/api/history')
 def get_history():
@@ -207,15 +329,15 @@ def sinbyte_submit():
         urls = data.get('urls', [])
         name = data.get('name', 'Sitemap Crawler')
         dripfeed = data.get('dripfeed', 1)
-        
+
         if not apikey:
             return jsonify({"error": "Missing API key"}), 400
-        
+
         if not urls:
             return jsonify({"error": "Missing URLs"}), 400
-        
+
         logger.info(f"Proxying Sinbyte request: {len(urls)} URLs for {name}")
-        
+
         # Forward to Sinbyte
         response = http_requests.post(
             'https://app.sinbyte.com/api/indexing/',
@@ -227,19 +349,19 @@ def sinbyte_submit():
             },
             timeout=30
         )
-        
+
         logger.info(f"Sinbyte response: {response.status_code}")
-        
+
         return jsonify(response.json()), response.status_code
-        
+
     except http_requests.exceptions.Timeout:
         logger.error("Sinbyte request timeout")
         return jsonify({"error": "Request timeout"}), 504
-        
+
     except http_requests.exceptions.RequestException as e:
         logger.error(f"Error proxying to Sinbyte: {e}")
         return jsonify({"error": f"Sinbyte error: {str(e)}"}), 502
-        
+
     except Exception as e:
         logger.error(f"Unexpected error in Sinbyte proxy: {e}")
         return jsonify({"error": str(e)}), 500

@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Clock,
   Link2,
+  ArrowRight,
 } from 'lucide-react'
 import { useSinbyte } from '../hooks/useSinbyte'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -110,16 +111,24 @@ const ResultCard = ({ site, onRefreshHistory }) => {
         {/* Domain + link */}
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <Globe size={18} className="text-blue-600 dark:text-blue-400 flex-shrink-0" />
-          <a
-            href={`https://${site.domain}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 truncate hover:underline"
-            title={site.domain}
-          >
-            <Link2 size={14} />
-            <span className="truncate">{site.domain || 'Unknown'}</span>
-          </a>
+          <div className="flex flex-col min-w-0">
+            <a
+              href={`https://${site.domain}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 truncate hover:underline"
+              title={site.domain}
+            >
+              <Link2 size={14} />
+              <span className="truncate">{site.domain || 'Unknown'}</span>
+            </a>
+            {site.original_domain && site.original_domain !== site.domain && (
+              <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                <ArrowRight size={10} />
+                <span className="truncate">từ {site.original_domain}</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Trạng thái */}
@@ -168,7 +177,7 @@ const ResultCard = ({ site, onRefreshHistory }) => {
           <button
             onClick={handleSubmit}
             disabled={!isSuccess || !urlsCount || !sinbyteApiKey || isSubmitting}
-            className="inline-flex items-center justify-center h-8 px-2 rounded-md text-xs bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-blue-400/40"
+            className="inline-flex items-center justify-center h-8 px-2 rounded-md text-xs bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
             title={!sinbyteApiKey ? 'Thiếu API key' : 'Submit lên Sinbyte'}
           >
             <Send size={14} />
@@ -203,6 +212,65 @@ const ResultCard = ({ site, onRefreshHistory }) => {
               </div>
             ) : (
               <>
+                {/* Redirect Warning (if applicable) */}
+                {site.redirect_info && site.redirect_info.total_chains > 0 && (
+                  <div className="mb-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle size={16} className="text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-yellow-800 dark:text-yellow-300 mb-1">
+                          Website có {site.redirect_info.total_chains} redirect chain(s) với tổng {site.redirect_info.total_hops} redirect(s)
+                        </div>
+                        <div className="text-xs text-yellow-700 dark:text-yellow-400">
+                          Max redirects: {site.redirect_info.max_redirects}
+                          {site.redirect_info.has_loops && <span className="ml-2 text-red-600 dark:text-red-400 font-semibold">⚠️ Phát hiện redirect loop!</span>}
+                        </div>
+
+                        {/* Show first few redirect chains */}
+                        {site.redirect_chains && site.redirect_chains.length > 0 && (
+                          <details className="mt-2">
+                            <summary className="cursor-pointer text-xs text-yellow-700 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-300">
+                              Xem chi tiết redirect chains
+                            </summary>
+                            <div className="mt-2 space-y-2">
+                              {site.redirect_chains.map((chain, idx) => (
+                                <div key={idx} className="pl-3 border-l-2 border-yellow-300 dark:border-yellow-700">
+                                  <div className="text-xs font-medium text-yellow-800 dark:text-yellow-300 mb-1">
+                                    Chain {idx + 1}: {chain.total_redirects} redirect(s) ({chain.total_duration.toFixed(0)}ms)
+                                  </div>
+                                  <div className="space-y-1">
+                                    {chain.hops && chain.hops.map((hop, hopIdx) => (
+                                      <div key={hopIdx} className="text-xs text-yellow-700 dark:text-yellow-400 flex items-start gap-1">
+                                        <ArrowRight size={12} className="mt-0.5 flex-shrink-0" />
+                                        <div className="flex-1 min-w-0">
+                                          <span className="font-mono bg-yellow-100 dark:bg-yellow-900/30 px-1 rounded">{hop.status_code}</span>
+                                          <span className="mx-1">→</span>
+                                          <span className="break-all">{hop.url}</span>
+                                          {hop.location && (
+                                            <div className="ml-4 text-yellow-600 dark:text-yellow-500">
+                                              ➜ {hop.location}
+                                            </div>
+                                          )}
+                                          <span className="ml-1 text-gray-500">({hop.duration.toFixed(0)}ms)</span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  {chain.has_loop && (
+                                    <div className="mt-1 text-xs text-red-600 dark:text-red-400 font-medium">
+                                      ⚠️ Loop detected at hop {chain.loop_at}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {Array.isArray(site.sitemaps) && site.sitemaps.length > 0 ? (
                   <div className="space-y-2">
                     {site.sitemaps.map((sm, idx) => (

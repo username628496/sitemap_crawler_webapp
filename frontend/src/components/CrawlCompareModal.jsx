@@ -60,13 +60,28 @@ const CrawlCompareModal = ({ payload, onClose }) => {
 
         {/* Content */}
         <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-          {crawls.length === 0 ? (
+          {payload?.message ? (
+            <div className="text-center py-12">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-orange-100 dark:bg-orange-900/20 mb-3">
+                <XCircle size={28} className="text-orange-600 dark:text-orange-400" />
+              </div>
+              <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
+                {payload.message}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Vui lòng thử lại sau
+              </p>
+            </div>
+          ) : crawls.length === 0 ? (
             <div className="text-center py-12">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 mb-3">
                 <Clock size={28} className="text-gray-400" />
               </div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
                 Chưa có dữ liệu so sánh
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Cần ít nhất 2 lần crawl để so sánh
               </p>
             </div>
           ) : (

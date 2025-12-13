@@ -99,7 +99,7 @@ const HistoryTable = ({ data, isLoading, offset }) => {
 
             {/* Rows */}
             <div className="divide-y divide-gray-100 dark:divide-gray-800/50">
-              {records.map((record, idx) => {
+              {records.map((record) => {
                 const index = data.indexOf(record)
                 const isSuccess = record.status === 'success'
                 const orderNum = offset + index + 1
@@ -155,16 +155,19 @@ const HistoryTable = ({ data, isLoading, offset }) => {
                     {/* Status + actions */}
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {isSuccess ? (
-                        <span className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-900/20 
-                                       text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5 border border-emerald-200 
+                        <span className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-900/20
+                                       text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5 border border-emerald-200
                                        dark:border-emerald-800">
                           <CheckCircle2 size={11} />
                           Thành công
                         </span>
                       ) : (
-                        <span className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-rose-50 dark:bg-rose-900/20 
-                                       text-rose-700 dark:text-rose-300 flex items-center gap-1.5 border border-rose-200 
-                                       dark:border-rose-800">
+                        <span
+                          className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-rose-50 dark:bg-rose-900/20
+                                     text-rose-700 dark:text-rose-300 flex items-center gap-1.5 border border-rose-200
+                                     dark:border-rose-800 cursor-help"
+                          title={record.error_message || 'Lỗi không xác định'}
+                        >
                           <XCircle size={11} />
                           Thất bại
                         </span>

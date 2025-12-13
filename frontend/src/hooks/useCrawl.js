@@ -24,27 +24,45 @@ export const useCrawl = () => {
 
     eventSource.onmessage = (event) => {
       try {
-        const site = JSON.parse(event.data)
-        console.log('useCrawl: Received site data:', site)
-        
-        tempResults.push(site)
-        setResults([...tempResults])
-        setProgress(prev => ({ ...prev, current: prev.current + 1 }))
+        const data = JSON.parse(event.data)
+        console.log('useCrawl: Received data:', data)
 
-        if (tempResults.length === domains.length) {
-          console.log('useCrawl: All done, tempResults:', tempResults)
-          eventSource.close()
-          setIsLoading(false)
-          
-          const successCount = tempResults.filter(r => r.status === 'success').length
-          toast.success(`Crawl hoàn tất: ${successCount}/${domains.length} thành công`)
-          
-          console.log('useCrawl: About to call onComplete, exists?', !!onComplete)
-          if (onComplete) {
-            console.log('useCrawl: Calling onComplete NOW')
-            onComplete(tempResults)
-          } else {
-            console.error('useCrawl: onComplete is undefined!')
+        // Handle status messages (starting, fallback, etc.)
+        if (data.status === 'starting' || data.status === 'fallback') {
+          console.log('useCrawl: Status message:', data.message)
+          return
+        }
+
+        // Handle domain result
+        if (data.domain) {
+          tempResults.push(data)
+          setResults([...tempResults])
+          setProgress(prev => ({ ...prev, current: prev.current + 1 }))
+
+          if (tempResults.length === domains.length) {
+            console.log('useCrawl: All done, tempResults:', tempResults)
+            eventSource.close()
+            setIsLoading(false)
+
+            const successCount = tempResults.filter(r => r.status === 'success').length
+            const failedCount = domains.length - successCount
+
+            // Show appropriate toast based on results
+            if (successCount === 0) {
+              toast.error(`Crawl thất bại: Tất cả ${domains.length} domain đều lỗi`)
+            } else if (failedCount === 0) {
+              toast.success(`Crawl hoàn tất: Tất cả ${domains.length} domain thành công`)
+            } else {
+              toast.success(`Crawl hoàn tất: ${successCount}/${domains.length} thành công, ${failedCount} thất bại`)
+            }
+
+            console.log('useCrawl: About to call onComplete, exists?', !!onComplete)
+            if (onComplete) {
+              console.log('useCrawl: Calling onComplete NOW')
+              onComplete(tempResults)
+            } else {
+              console.error('useCrawl: onComplete is undefined!')
+            }
           }
         }
       } catch (error) {

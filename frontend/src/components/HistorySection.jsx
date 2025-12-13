@@ -80,15 +80,25 @@ const HistorySection = ({ refreshTrigger }) => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleExport}
+              className="inline-flex items-center justify-center w-8 h-8 text-gray-600 dark:text-gray-300
+                         hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700
+                         rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400/40 transition"
+              title="Export CSV"
+            >
+              <Download size={16} />
+            </button>
             <button
               onClick={() => setShowStats(true)}
-              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 dark:bg-orange-900/20 dark:text-orange-300 dark:border-orange-800 rounded-md focus:outline-none focus:ring-1 focus:ring-orange-400/40 transition"
+              className="inline-flex items-center justify-center w-8 h-8 text-gray-600 dark:text-gray-300
+                         hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700
+                         rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400/40 transition"
+              title="Thống kê"
             >
               <BarChart3 size={16} />
-              Thống kê
             </button>
-        
           </div>
         </div>
       </div>

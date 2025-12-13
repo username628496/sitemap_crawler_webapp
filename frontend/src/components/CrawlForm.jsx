@@ -88,14 +88,11 @@ const CrawlForm = ({ onCrawlComplete, crawlResults, onClearResults }) => {
 
   return (
     <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md p-5">
-      {/* Header */}
       <div className="flex items-center gap-2 mb-4">
         <List size={18} className="text-blue-600 dark:text-blue-400" />
         <h2 className="text-base font-semibold text-gray-900 dark:text-white">Nhập Danh Sách Domain</h2>
       </div>
-    
 
-      {/* Input */}
       <textarea
         id="domainInput"
         value={domains}
@@ -107,7 +104,6 @@ const CrawlForm = ({ onCrawlComplete, crawlResults, onClearResults }) => {
         disabled={isLoading}
       />
 
-      {/* Badge domain count */}
       {domainCount > 0 && (
         <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">
           <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
@@ -116,7 +112,6 @@ const CrawlForm = ({ onCrawlComplete, crawlResults, onClearResults }) => {
         </p>
       )}
 
-      {/* Progress */}
       {isLoading && (
         <div className="mt-3">
           <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
@@ -131,7 +126,6 @@ const CrawlForm = ({ onCrawlComplete, crawlResults, onClearResults }) => {
         </div>
       )}
 
-      {/* Actions */}
       <div className="flex items-center gap-2 mt-4 flex-wrap">
         <button
           onClick={handleCopyUrls}
@@ -167,10 +161,15 @@ const CrawlForm = ({ onCrawlComplete, crawlResults, onClearResults }) => {
         <button
           onClick={handleCrawl}
           disabled={isLoading || !domains.trim()}
-          className="ml-auto inline-flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-md
-                     focus:outline-none focus:ring-1 focus:ring-orange-400/40 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="ml-auto inline-flex items-center justify-center gap-1.5 h-9 px-4
+                     bg-gradient-to-r from-orange-500 via-orange-600 to-red-500
+                     hover:from-orange-600 hover:via-red-600 hover:to-red-600
+                     text-white text-xs font-bold rounded-md shadow-md hover:shadow-lg
+                     focus:outline-none focus:ring-2 focus:ring-orange-400/60
+                     disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none
+                     transition-all duration-200 transform hover:scale-[1.02]"
         >
-          {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />}
+          {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Rocket size={14} />}
           {isLoading ? 'Đang crawl...' : 'Crawl'}
         </button>
       </div>

@@ -2,6 +2,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 import pytz
+import json
 from typing import Dict, List, Optional, Tuple
 import sys
 import os
@@ -42,6 +43,7 @@ class DatabaseManager:
                 CREATE TABLE IF NOT EXISTS crawl_sessions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     domain TEXT NOT NULL,
+                    original_domain TEXT,
                     timestamp DATETIME NOT NULL,
                     status TEXT NOT NULL,
                     total_urls INTEGER DEFAULT 0,
@@ -52,6 +54,12 @@ class DatabaseManager:
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+
+            # Add original_domain column if it doesn't exist (migration)
+            try:
+                cursor.execute('ALTER TABLE crawl_sessions ADD COLUMN original_domain TEXT')
+            except:
+                pass  # Column already exists
             
             # Detailed sitemap results table
             cursor.execute('''
@@ -89,40 +97,96 @@ class DatabaseManager:
                     FOREIGN KEY (session_id) REFERENCES crawl_sessions (id)
                 )
             ''')
-            
+
+            # SpeedyIndex tasks table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS speedyindex_tasks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    task_id TEXT UNIQUE,
+                    task_name TEXT NOT NULL,
+                    domain TEXT,
+                    task_type TEXT DEFAULT 'indexer',
+                    search_engine TEXT DEFAULT 'google',
+                    total_urls INTEGER DEFAULT 0,
+                    submitted_urls INTEGER DEFAULT 0,
+                    processed_count INTEGER DEFAULT 0,
+                    indexed_count INTEGER DEFAULT 0,
+                    credits_used INTEGER DEFAULT 0,
+                    status TEXT DEFAULT 'pending',
+                    is_completed BOOLEAN DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    completed_at DATETIME
+                )
+            ''')
+
+            # SpeedyIndex task URLs table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS speedyindex_urls (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    task_id TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    status TEXT DEFAULT 'pending',
+                    is_indexed BOOLEAN DEFAULT 0,
+                    error_message TEXT,
+                    checked_at DATETIME,
+                    FOREIGN KEY (task_id) REFERENCES speedyindex_tasks (task_id)
+                )
+            ''')
+
+            # Redirect chains table (NEW)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS redirect_chains (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER,
+                    initial_url TEXT NOT NULL,
+                    final_url TEXT NOT NULL,
+                    total_redirects INTEGER DEFAULT 0,
+                    total_duration REAL DEFAULT 0,
+                    has_loop BOOLEAN DEFAULT 0,
+                    loop_at INTEGER,
+                    redirect_hops TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (session_id) REFERENCES crawl_sessions (id)
+                )
+            ''')
+
             # Create indexes
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_domain ON crawl_sessions(domain)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_timestamp ON crawl_sessions(timestamp)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_status ON crawl_sessions(status)')
-            
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_redirect_session ON redirect_chains(session_id)')
+
             logger.info("Database initialized successfully")
     
-    def save_crawl_session(self, domain: str, status: str, 
+    def save_crawl_session(self, domain: str, status: str,
                           total_urls: int = 0, duration: float = 0,
                           sitemaps_data: List[Dict] = None,
                           error_message: str = None,
                           sample_urls: List[str] = None,
+                          redirect_chains: List = None,
+                          original_domain: str = None,
                           timestamp_override: str = None) -> Optional[int]:
         """Save crawl session to database"""
-        
+
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
-                
+
                 tz = pytz.timezone(Config.TIMEZONE)
                 if timestamp_override:
                     timestamp = timestamp_override
                 else:
                     timestamp = datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S')
-                
+
                 # Insert main session
                 cursor.execute('''
-                    INSERT INTO crawl_sessions 
-                    (domain, timestamp, status, total_urls, duration_sec, 
+                    INSERT INTO crawl_sessions
+                    (domain, original_domain, timestamp, status, total_urls, duration_sec,
                      sitemaps_found, error_message)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
-                    domain, timestamp, status, total_urls, duration,
+                    domain, original_domain, timestamp, status, total_urls, duration,
                     len(sitemaps_data) if sitemaps_data else 0, error_message
                 ))
                 
@@ -158,11 +222,43 @@ class DatabaseManager:
                 if duration > 0 and total_urls > 0:
                     urls_per_second = total_urls / duration
                     cursor.execute('''
-                        INSERT INTO performance_metrics 
+                        INSERT INTO performance_metrics
                         (session_id, metric_name, metric_value, metric_unit)
                         VALUES (?, ?, ?, ?)
                     ''', (session_id, 'urls_per_second', urls_per_second, 'urls/sec'))
-                
+
+                # Store redirect chains (NEW)
+                if redirect_chains:
+                    for chain in redirect_chains:
+                        # Convert hops to JSON string
+                        hops_json = json.dumps([
+                            {
+                                'url': hop.url,
+                                'status_code': hop.status_code,
+                                'location': hop.location,
+                                'duration': hop.duration
+                            }
+                            for hop in chain.hops
+                        ])
+
+                        cursor.execute('''
+                            INSERT INTO redirect_chains
+                            (session_id, initial_url, final_url, total_redirects,
+                             total_duration, has_loop, loop_at, redirect_hops)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (
+                            session_id,
+                            chain.initial_url,
+                            chain.final_url,
+                            chain.total_redirects,
+                            chain.total_duration,
+                            1 if chain.has_loop else 0,
+                            chain.loop_at,
+                            hops_json
+                        ))
+
+                    logger.info(f"Saved {len(redirect_chains)} redirect chains for session {session_id}")
+
                 logger.info(f"Saved crawl session {session_id} for domain {domain}")
                 return session_id
                 
@@ -234,40 +330,121 @@ class DatabaseManager:
                 
                 cursor.execute(main_query, params + [limit, offset])
                 sessions = cursor.fetchall()
-                
+
+                # Early return if no sessions
+                if not sessions:
+                    return {
+                        "results": [],
+                        "total": total_count,
+                        "limit": limit,
+                        "offset": offset,
+                        "filters_applied": {
+                            "domain": domain_filter,
+                            "status": status_filter,
+                            "date_from": date_from,
+                            "date_to": date_to
+                        }
+                    }
+
+                # Get all session IDs for batch queries
+                session_ids = [dict(s)['id'] for s in sessions]
+                session_ids_str = ','.join('?' * len(session_ids))
+
+                # Batch fetch sitemaps for all sessions
+                cursor.execute(f'''
+                    SELECT session_id, sitemap_url, urls_found, processing_time, status, error_message
+                    FROM sitemap_results
+                    WHERE session_id IN ({session_ids_str})
+                ''', session_ids)
+                all_sitemaps = cursor.fetchall()
+
+                # Batch fetch sample URLs for all sessions
+                cursor.execute(f'''
+                    SELECT session_id, url, url_type
+                    FROM (
+                        SELECT session_id, url, url_type,
+                               ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY id) as rn
+                        FROM sample_urls
+                        WHERE session_id IN ({session_ids_str})
+                    ) WHERE rn <= 10
+                ''', session_ids)
+                all_sample_urls = cursor.fetchall()
+
+                # Batch fetch redirect chains for all sessions
+                cursor.execute(f'''
+                    SELECT session_id, initial_url, final_url, total_redirects, total_duration,
+                           has_loop, loop_at, redirect_hops
+                    FROM redirect_chains
+                    WHERE session_id IN ({session_ids_str})
+                ''', session_ids)
+                all_redirect_chains = cursor.fetchall()
+
+                # Group data by session_id
+                sitemaps_by_session = {}
+                for sm in all_sitemaps:
+                    sid = sm['session_id']
+                    if sid not in sitemaps_by_session:
+                        sitemaps_by_session[sid] = []
+                    sitemaps_by_session[sid].append(sm)
+
+                urls_by_session = {}
+                for url in all_sample_urls:
+                    sid = url['session_id']
+                    if sid not in urls_by_session:
+                        urls_by_session[sid] = []
+                    urls_by_session[sid].append(url)
+
+                chains_by_session = {}
+                for rc in all_redirect_chains:
+                    sid = rc['session_id']
+                    if sid not in chains_by_session:
+                        chains_by_session[sid] = []
+                    chains_by_session[sid].append(rc)
+
+                # Build results
                 results = []
                 for session in sessions:
                     session_dict = dict(session)
                     session_id = session_dict['id']
-                    
-                    # Get sitemap details
-                    cursor.execute('''
-                        SELECT sitemap_url, urls_found, processing_time, status, error_message
-                        FROM sitemap_results WHERE session_id = ?
-                    ''', (session_id,))
-                    sitemaps = cursor.fetchall()
-                    
-                    # Get sample URLs
-                    cursor.execute('''
-                        SELECT url, url_type FROM sample_urls 
-                        WHERE session_id = ? LIMIT 10
-                    ''', (session_id,))
-                    sample_urls = cursor.fetchall()
-                    
+
+                    # Get sitemaps for this session
+                    sitemaps = sitemaps_by_session.get(session_id, [])
                     session_dict['sitemaps'] = [
                         {
                             "url": sm['sitemap_url'],
-                            "urls_found": sm['urls_found'], 
+                            "urls_found": sm['urls_found'],
                             "processing_time": sm['processing_time'],
                             "status": sm['status'],
                             "error": sm['error_message']
                         } for sm in sitemaps
                     ]
-                    
+
+                    # Get sample URLs for this session
+                    sample_urls = urls_by_session.get(session_id, [])
                     session_dict['sample_urls'] = [
                         {"url": url['url'], "type": url['url_type']} for url in sample_urls
                     ]
-                    
+
+                    # Get redirect chains for this session
+                    redirect_chains = chains_by_session.get(session_id, [])
+                    if redirect_chains:
+                        session_dict['redirect_chains'] = [
+                            {
+                                "initial_url": rc['initial_url'],
+                                "final_url": rc['final_url'],
+                                "total_redirects": rc['total_redirects'],
+                                "total_duration": rc['total_duration'],
+                                "has_loop": bool(rc['has_loop']),
+                                "loop_at": rc['loop_at'],
+                                "hops": json.loads(rc['redirect_hops']) if rc['redirect_hops'] else []
+                            }
+                            for rc in redirect_chains
+                        ]
+                        session_dict['redirect_summary'] = {
+                            "total_chains": len(redirect_chains),
+                            "total_hops": sum(rc['total_redirects'] for rc in redirect_chains),
+                        }
+
                     results.append(session_dict)
                 
                 return {
