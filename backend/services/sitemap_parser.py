@@ -1,4 +1,5 @@
 import requests
+import cloudscraper
 import xml.etree.ElementTree as ET
 from urllib.parse import urljoin, urlparse
 from typing import List, Tuple, Set, Optional
@@ -190,8 +191,15 @@ class SitemapParser:
         self.timeout = Config.REQUEST_TIMEOUT
         self.max_depth = Config.MAX_SITEMAP_DEPTH
         self.redirect_tracker = RedirectTracker(max_redirects=10)
-        # Use session to maintain cookies (important for Cloudflare)
-        self.session = requests.Session()
+        # Use cloudscraper to bypass Cloudflare protection
+        # cloudscraper automatically solves Cloudflare challenges
+        self.session = cloudscraper.create_scraper(
+            browser={
+                'browser': 'chrome',
+                'platform': 'windows',
+                'desktop': True
+            }
+        )
         self.session.headers.update(self.headers)
 
     # -------------------------------
