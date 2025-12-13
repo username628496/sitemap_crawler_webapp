@@ -190,6 +190,9 @@ class SitemapParser:
         self.timeout = Config.REQUEST_TIMEOUT
         self.max_depth = Config.MAX_SITEMAP_DEPTH
         self.redirect_tracker = RedirectTracker(max_redirects=10)
+        # Use session to maintain cookies (important for Cloudflare)
+        self.session = requests.Session()
+        self.session.headers.update(self.headers)
 
     # -------------------------------
     # Helper: Safe fetch with retries and redirect tracking
@@ -228,18 +231,26 @@ class SitemapParser:
                     else:
                         logger.info(f"✅ Fetch thành công ({response.status_code}) {url}")
 
+                    # Small delay after successful request (anti-Cloudflare)
+                    import random
+                    sleep(random.uniform(0.5, 1.5))
+
                     return response.text, chain
                 else:
                     # Fast path: use auto-follow redirects (no tracking)
-                    response = requests.get(
+                    response = self.session.get(
                         url,
-                        headers=self.headers,
                         timeout=self.timeout,
                         allow_redirects=True,  # Auto-follow (faster)
                         verify=False  # SSL verification OFF (many domains have invalid certs)
                     )
                     response.raise_for_status()
                     logger.info(f"✅ Fetch thành công ({response.status_code}) {url}")
+
+                    # Small delay after successful request (anti-Cloudflare)
+                    import random
+                    sleep(random.uniform(0.5, 1.5))
+
                     return response.text, None
 
             except requests.exceptions.SSLError as e:
@@ -266,9 +277,8 @@ class SitemapParser:
                             return response.text, chain
                         else:
                             # Fast path with SSL off
-                            response = requests.get(
+                            response = self.session.get(
                                 url,
-                                headers=self.headers,
                                 timeout=self.timeout,
                                 allow_redirects=True,
                                 verify=False
@@ -281,7 +291,10 @@ class SitemapParser:
             except requests.exceptions.RequestException as e:
                 logger.warning(f"⚠️ fetch_url thất bại ({attempt}/{retries}) cho {url}: {e}")
                 if attempt < retries:
-                    sleep(1.5 * attempt)
+                    # Random delay để tránh Cloudflare bot detection
+                    import random
+                    delay = 2.0 + random.uniform(0, 2.0)  # 2-4 seconds random
+                    sleep(delay)
                 else:
                     raise Exception(f"Không thể tải {url} sau {retries} lần thử: {e}")
 
