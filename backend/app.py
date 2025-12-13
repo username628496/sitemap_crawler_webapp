@@ -95,17 +95,14 @@ def crawl_stream():
             # Run async crawler in sync context
             import asyncio
 
-            # Fix "Event loop is closed" error
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_closed():
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+            # Fix "Event loop is closed" error - use new loop each time
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
 
-            results = asyncio.run(async_crawler.crawl_domains(domains))
+            try:
+                results = loop.run_until_complete(async_crawler.crawl_domains(domains))
+            finally:
+                loop.close()
 
             # Stream each domain result
             for result in results:
