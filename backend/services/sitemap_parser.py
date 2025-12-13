@@ -245,17 +245,16 @@ class SitemapParser:
 
                     return response.text, chain
                 else:
-                    # Fast path: use auto-follow redirects (no tracking)
+                    # Fast path: use cloudscraper (bypasses Cloudflare automatically)
                     response = self.session.get(
                         url,
                         timeout=self.timeout,
-                        allow_redirects=True,  # Auto-follow (faster)
-                        verify=False  # SSL verification OFF (many domains have invalid certs)
+                        allow_redirects=True
                     )
                     response.raise_for_status()
                     logger.info(f"✅ Fetch thành công ({response.status_code}) {url}")
 
-                    # Small delay after successful request (anti-Cloudflare)
+                    # Small delay after successful request (anti-bot detection)
                     import random
                     sleep(random.uniform(0.5, 1.5))
 
