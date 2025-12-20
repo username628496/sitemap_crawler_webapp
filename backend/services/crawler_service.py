@@ -161,13 +161,28 @@ class CrawlerService:
     # ============================================================
     # Xử lý nhiều domain song song
     # ============================================================
-    def process_domains(self, domains: List[str], max_workers: int = None) -> List[Dict]:
+    def process_domains(self, domains: List[str], max_workers: int = None, callback=None) -> List[Dict]:
+        """
+        Process multiple domains concurrently.
+
+        Args:
+            domains: List of domains to crawl
+            max_workers: Number of concurrent workers
+            callback: Optional callback function called after each domain completes.
+                     Signature: callback(result: Dict, completed: int, total: int)
+
+        Returns:
+            List of crawl results
+        """
         if max_workers is None:
             max_workers = self.config.MAX_WORKERS
 
         results = []
+        completed_count = 0
+        total_domains = len(domains)
+
         logger.info(
-            f"⚙️ Bắt đầu crawl đồng thời {len(domains)} domain với {max_workers} worker"
+            f"⚙️ Bắt đầu crawl đồng thời {total_domains} domain với {max_workers} worker"
         )
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -180,13 +195,25 @@ class CrawlerService:
                 try:
                     result = future.result()
                     results.append(result)
+                    completed_count += 1
+
+                    # Call callback if provided (for SSE streaming)
+                    if callback:
+                        callback(result, completed_count, total_domains)
+
                 except Exception as e:
                     logger.error(f"🚫 Lỗi bất ngờ khi xử lý {domain}: {e}")
-                    results.append({
+                    error_result = {
                         "domain": domain,
                         "status": "failed",
                         "error": f"Unexpected error: {str(e)}",
-                    })
+                    }
+                    results.append(error_result)
+                    completed_count += 1
 
-        logger.info(f"✅ Hoàn tất crawl {len(domains)} domain")
+                    # Call callback for errors too
+                    if callback:
+                        callback(error_result, completed_count, total_domains)
+
+        logger.info(f"✅ Hoàn tất crawl {total_domains} domain")
         return results

@@ -9,9 +9,9 @@ class Config:
     # Database
     DATABASE_PATH = os.getenv('DATABASE_PATH', 'crawl_history.db')
 
-    # Crawler settings
-    MAX_WORKERS = int(os.getenv('MAX_WORKERS', 10))
-    REQUEST_TIMEOUT = int(os.getenv('REQUEST_TIMEOUT', 20))  # tăng lên 20s
+    # Crawler settings - Optimized for speed
+    MAX_WORKERS = int(os.getenv('MAX_WORKERS', 20))  # Tăng từ 10 -> 20
+    REQUEST_TIMEOUT = int(os.getenv('REQUEST_TIMEOUT', 15))  # Giảm từ 20s -> 15s
     MAX_SITEMAP_DEPTH = int(os.getenv('MAX_SITEMAP_DEPTH', 10))
 
     # User Agent Pool - Googlebot first
@@ -49,9 +49,9 @@ class Config:
     RETRY_DELAY = float(os.getenv('RETRY_DELAY', 2.0))
     EXPONENTIAL_BACKOFF = True
 
-    # Rate limiting
-    MIN_DELAY = float(os.getenv('MIN_DELAY', 1.0))
-    MAX_DELAY = float(os.getenv('MAX_DELAY', 3.0))
+    # Rate limiting - Optimized for speed
+    MIN_DELAY = float(os.getenv('MIN_DELAY', 0.3))  # Giảm từ 1.0 -> 0.3
+    MAX_DELAY = float(os.getenv('MAX_DELAY', 0.8))  # Giảm từ 3.0 -> 0.8
 
     # Request behavior
     ALLOW_REDIRECTS = True
@@ -70,12 +70,22 @@ class Config:
     # Timezone
     TIMEZONE = os.getenv('TIMEZONE', 'Asia/Ho_Chi_Minh')
 
-    # Proxy config
-    USE_PROXY = os.getenv('USE_PROXY', 'false').lower() == 'true'
+    # Proxy config - Residential Vietnam
+    USE_PROXY = os.getenv('USE_PROXY', 'true').lower() == 'true'
+
+    # Residential proxy credentials
+    PROXY_HOST = os.getenv('PROXY_HOST', '180.93.75.90')
+    PROXY_PORT = int(os.getenv('PROXY_PORT', 52916))
+    PROXY_USERNAME = os.getenv('PROXY_USERNAME', '3aga3gh3')
+    PROXY_PASSWORD = os.getenv('PROXY_PASSWORD', 'wIkN2o5b')
+
+    # Build proxy URL with authentication
+    PROXY_URL = f"http://{PROXY_USERNAME}:{PROXY_PASSWORD}@{PROXY_HOST}:{PROXY_PORT}"
+
     PROXIES = {
-        "http": os.getenv("HTTP_PROXY", ""),
-        "https": os.getenv("HTTPS_PROXY", ""),
-    } if os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY") else None
+        "http": PROXY_URL,
+        "https": PROXY_URL,
+    } if USE_PROXY else None
 
     # Logging
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')

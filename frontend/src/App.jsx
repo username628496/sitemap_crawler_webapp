@@ -10,7 +10,15 @@ function App() {
   const [crawlResults, setCrawlResults] = useState([])
   const [refreshHistory, setRefreshHistory] = useState(0)
 
+  // ✅ Update results immediately as each domain completes
+  const handleResultUpdate = (results) => {
+    console.log('App: handleResultUpdate called with', results.length, 'results')
+    setCrawlResults(results)
+  }
+
+  // Called when ALL domains complete
   const handleCrawlComplete = (results) => {
+    console.log('App: handleCrawlComplete called')
     setCrawlResults(results)
     setTimeout(() => {
       const resultsElement = document.getElementById('crawl-results')
@@ -38,6 +46,7 @@ function App() {
         <main className="space-y-6">
           <CrawlForm
             onCrawlComplete={handleCrawlComplete}
+            onResultUpdate={handleResultUpdate}
             crawlResults={crawlResults}
             onClearResults={handleClearResults}
           />

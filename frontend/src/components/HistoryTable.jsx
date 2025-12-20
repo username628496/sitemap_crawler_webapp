@@ -11,6 +11,7 @@ import {
 import { formatDate, formatDuration, truncateDomain } from '../utils/formatters'
 import { crawlAPI } from '../services/api'
 import CrawlCompareModal from './CrawlCompareModal'
+import { SkeletonTable } from './LoadingSkeleton'
 
 /** Helpers */
 const kfmt = (n) => {
@@ -58,11 +59,8 @@ const HistoryTable = ({ data, isLoading, offset }) => {
 
   if (isLoading) {
     return (
-      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800">
-        <div className="flex flex-col items-center justify-center py-12">
-          <Loader2 className="animate-spin text-blue-600 mb-2" size={28} />
-          <p className="text-sm text-gray-600 dark:text-gray-400">Đang tải dữ liệu...</p>
-        </div>
+      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
+        <SkeletonTable rows={5} />
       </div>
     )
   }

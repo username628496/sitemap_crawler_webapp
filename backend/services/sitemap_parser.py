@@ -260,9 +260,9 @@ class SitemapParser:
                     else:
                         logger.info(f"✅ Fetch thành công ({response.status_code}) {url}")
 
-                    # Small delay after successful request (anti-Cloudflare)
+                    # Small delay after successful request (optimized for speed)
                     import random
-                    sleep(random.uniform(0.5, 1.5))
+                    sleep(random.uniform(0.2, 0.5))
 
                     return response.text, chain
                 else:
@@ -275,9 +275,9 @@ class SitemapParser:
                     response.raise_for_status()
                     logger.info(f"✅ Fetch thành công ({response.status_code}) {url}")
 
-                    # Small delay after successful request (anti-bot detection)
+                    # Small delay after successful request (optimized for speed)
                     import random
-                    sleep(random.uniform(0.5, 1.5))
+                    sleep(random.uniform(0.2, 0.5))
 
                     return response.text, None
 

@@ -6,7 +6,6 @@ from io import StringIO
 import sys
 import os
 import requests as http_requests
-import asyncio
 
 # Add current directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -49,12 +48,52 @@ logger.info("Application initialized successfully")
 # Routes
 @app.route('/')
 def index():
-    """Health check endpoint"""
+    """Basic info endpoint"""
     return jsonify({
         "status": "running",
         "service": "Sitemap Crawler API",
         "version": "3.0"
     })
+
+@app.route('/api/health')
+def health_check():
+    """Comprehensive health check endpoint"""
+    from datetime import datetime
+
+    health_status = {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "components": {}
+    }
+
+    # Check database connection
+    try:
+        stats = history_service.get_statistics(days=1)
+        health_status["components"]["database"] = {
+            "status": "ok",
+            "total_sessions": stats.get("total_sessions", 0)
+        }
+    except Exception as e:
+        health_status["status"] = "unhealthy"
+        health_status["components"]["database"] = {
+            "status": "error",
+            "error": str(e)
+        }
+
+    # Check proxy status
+    health_status["components"]["proxy"] = {
+        "enabled": Config.USE_PROXY,
+        "host": Config.PROXY_HOST if Config.USE_PROXY else None
+    }
+
+    # Check configuration
+    health_status["components"]["config"] = {
+        "max_workers": Config.MAX_WORKERS,
+        "request_timeout": Config.REQUEST_TIMEOUT
+    }
+
+    status_code = 200 if health_status["status"] == "healthy" else 503
+    return jsonify(health_status), status_code
 
 @app.route('/api/crawl', methods=['POST'])
 def crawl():
@@ -62,49 +101,119 @@ def crawl():
     try:
         data = request.get_json()
         domains = data.get("domains", [])
-        
+
         if not domains:
-            return jsonify({"error": "Thiếu domain"}), 400
-        
+            return jsonify({
+                "error": "Không có domain để crawl",
+                "message": "Vui lòng nhập ít nhất một domain (ví dụ: example.com)",
+                "suggestion": "Mỗi domain một dòng, không cần http:// hoặc https://"
+            }), 400
+
         logger.info(f"Received crawl request for {len(domains)} domains")
         results = crawler_service.process_domains(domains)
-        
+
         return jsonify(results)
-        
+
     except Exception as e:
         logger.error(f"Error in /api/crawl: {e}")
-        return jsonify({"error": str(e)}), 500
+        error_msg = str(e)
+
+        # User-friendly error messages
+        if "403" in error_msg or "Forbidden" in error_msg:
+            return jsonify({
+                "error": "Website chặn IP của chúng tôi",
+                "message": "Website này không cho phép truy cập từ IP datacenter",
+                "suggestion": "Sử dụng proxy residential hoặc thử lại sau"
+            }), 403
+        elif "timeout" in error_msg.lower():
+            return jsonify({
+                "error": "Kết nối timeout",
+                "message": "Website không phản hồi trong thời gian quy định",
+                "suggestion": "Kiểm tra domain có đúng không, hoặc thử lại sau"
+            }), 504
+        elif "sitemap" in error_msg.lower():
+            return jsonify({
+                "error": "Không tìm thấy sitemap",
+                "message": "Website này không có sitemap.xml hoặc robots.txt",
+                "suggestion": "Kiểm tra lại domain, một số website không public sitemap"
+            }), 404
+        else:
+            return jsonify({
+                "error": "Lỗi hệ thống",
+                "message": "Đã xảy ra lỗi không mong muốn khi crawl",
+                "suggestion": "Vui lòng thử lại hoặc liên hệ hỗ trợ",
+                "details": error_msg
+            }), 500
 
 @app.route('/api/crawl-stream')
 def crawl_stream():
-    """Streaming crawl endpoint with Server-Sent Events using Sync Crawler"""
+    """Streaming crawl endpoint with Server-Sent Events - Real-time results"""
+    from queue import Queue
+    from threading import Thread
+
     def stream_sync_results(domains):
-        """Stream results from sync crawler"""
-        try:
-            # Send initial progress message
-            yield f"data: {json.dumps({'status': 'starting', 'message': 'Khởi động crawler...', 'total': len(domains)})}\n\n"
+        """Stream results from sync crawler with real-time updates"""
+        result_queue = Queue()
 
-            # Use sync crawler (crawler_service already handles everything)
-            results = crawler_service.process_domains(domains)
+        def result_callback(result, completed, total):
+            """Callback to receive results as they complete"""
+            result_queue.put({
+                'type': 'result',
+                'data': result,
+                'progress': {
+                    'completed': completed,
+                    'total': total,
+                    'percentage': round((completed / total) * 100, 1)
+                }
+            })
 
-            # Stream each domain result (results are already dicts from crawler_service)
-            for result in results:
-                # Result is already saved to DB by crawler_service, just stream it
-                yield f"data: {json.dumps(result)}\n\n"
+        def crawl_worker():
+            """Run crawler in background thread"""
+            try:
+                crawler_service.process_domains(domains, callback=result_callback)
+                result_queue.put({'type': 'done'})
+            except Exception as e:
+                logger.error(f"❌ Crawler error: {e}")
+                result_queue.put({'type': 'error', 'message': str(e)})
 
-        except Exception as e:
-            logger.error(f"❌ Error in sync stream: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        # Start crawler in background
+        Thread(target=crawl_worker, daemon=True).start()
+
+        # Send initial message
+        yield f"data: {json.dumps({'status': 'starting', 'message': 'Khởi động crawler...', 'total': len(domains)})}\n\n"
+
+        # Stream results as they arrive
+        while True:
+            item = result_queue.get()
+
+            if item['type'] == 'result':
+                # Stream individual domain result with progress
+                yield f"data: {json.dumps(item['data'])}\n\n"
+                logger.info(f"📤 Streamed result for {item['data'].get('domain')} ({item['progress']['completed']}/{item['progress']['total']})")
+
+            elif item['type'] == 'done':
+                # All done
+                yield f"data: {json.dumps({'status': 'completed', 'message': 'Tất cả domain đã crawl xong'})}\n\n"
+                logger.info("✅ Stream completed")
+                break
+
+            elif item['type'] == 'error':
+                # Error occurred
+                yield f"data: {json.dumps({'status': 'error', 'message': item['message']})}\n\n"
+                logger.error(f"❌ Stream error: {item['message']}")
+                break
 
     domains_param = request.args.get("domains", "")
     domain_list = [d.strip() for d in domains_param.split(",") if d.strip()]
 
     if not domain_list:
-        return jsonify({"error": "Thiếu domain"}), 400
+        return jsonify({
+            "error": "Không có domain để crawl",
+            "message": "Vui lòng nhập ít nhất một domain",
+            "suggestion": "Format: ?domains=example.com,google.com"
+        }), 400
 
-    logger.info(f"Starting sync stream crawl for {len(domain_list)} domains")
+    logger.info(f"🚀 Starting real-time SSE stream for {len(domain_list)} domains")
 
     return Response(stream_sync_results(domain_list), content_type='text/event-stream')
 
@@ -132,7 +241,12 @@ def get_history():
         
     except Exception as e:
         logger.error(f"Error in /api/history: {e}")
-        return jsonify({"error": f"Lỗi đọc lịch sử: {str(e)}"}), 500
+        return jsonify({
+            "error": "Không thể tải lịch sử crawl",
+            "message": "Đã xảy ra lỗi khi đọc dữ liệu từ database",
+            "suggestion": "Vui lòng thử lại hoặc kiểm tra logs",
+            "details": str(e)
+        }), 500
 
 @app.route('/api/history/statistics')
 def get_statistics():

@@ -7,9 +7,12 @@ export const useCrawl = () => {
   const [results, setResults] = useState([])
   const [progress, setProgress] = useState({ current: 0, total: 0 })
 
-  const startCrawl = useCallback((domains, onComplete) => {
-    console.log('useCrawl: Starting crawl, onComplete exists?', !!onComplete)
-    
+  const startCrawl = useCallback((domains, onComplete, onResultUpdate) => {
+    console.log('useCrawl: Starting crawl, callbacks:', {
+      onComplete: !!onComplete,
+      onResultUpdate: !!onResultUpdate
+    })
+
     if (!domains || domains.length === 0) {
       toast.error('Vui lòng nhập domain')
       return
@@ -27,9 +30,16 @@ export const useCrawl = () => {
         const data = JSON.parse(event.data)
         console.log('useCrawl: Received data:', data)
 
-        // Handle status messages (starting, fallback, etc.)
-        if (data.status === 'starting' || data.status === 'fallback') {
+        // Handle status messages (starting, completed, etc.)
+        if (data.status === 'starting') {
           console.log('useCrawl: Status message:', data.message)
+          return
+        }
+
+        if (data.status === 'completed') {
+          console.log('useCrawl: Server sent completed signal')
+          eventSource.close()
+          setIsLoading(false)
           return
         }
 
@@ -39,6 +49,13 @@ export const useCrawl = () => {
           setResults([...tempResults])
           setProgress(prev => ({ ...prev, current: prev.current + 1 }))
 
+          // ✅ Call onResultUpdate immediately for each result
+          if (onResultUpdate) {
+            console.log('useCrawl: Calling onResultUpdate for', data.domain)
+            onResultUpdate([...tempResults])
+          }
+
+          // Check if all done
           if (tempResults.length === domains.length) {
             console.log('useCrawl: All done, tempResults:', tempResults)
             eventSource.close()
@@ -60,8 +77,6 @@ export const useCrawl = () => {
             if (onComplete) {
               console.log('useCrawl: Calling onComplete NOW')
               onComplete(tempResults)
-            } else {
-              console.error('useCrawl: onComplete is undefined!')
             }
           }
         }

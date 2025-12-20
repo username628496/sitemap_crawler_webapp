@@ -3,7 +3,7 @@ import { List, Rocket, Loader2, Copy, FileDown, ExternalLink, CheckCircle2, XCir
 import { useCrawl } from '../hooks/useCrawl'
 import toast from 'react-hot-toast'
 
-const CrawlForm = ({ onCrawlComplete, crawlResults, onClearResults }) => {
+const CrawlForm = ({ onCrawlComplete, onResultUpdate, crawlResults, onClearResults }) => {
   const [domains, setDomains] = useState('')
   const { isLoading, progress, startCrawl } = useCrawl()
 
@@ -16,7 +16,8 @@ const CrawlForm = ({ onCrawlComplete, crawlResults, onClearResults }) => {
       return
     }
     onClearResults?.()
-    startCrawl(domainList, onCrawlComplete)
+    // ✅ Pass both callbacks: onComplete and onResultUpdate
+    startCrawl(domainList, onCrawlComplete, onResultUpdate)
   }
 
   const allUrls = useMemo(() => {
