@@ -1,0 +1,32 @@
+[Unit]
+Description=Sitemap Crawler Backend (Gunicorn)
+After=network.target
+
+[Service]
+Type=notify
+User=peter
+WorkingDirectory=/var/www/sitemap-crawler/backend
+Environment="PATH=/var/www/sitemap-crawler/backend/venv/bin"
+Environment="PYTHONPATH=/var/www/sitemap-crawler/backend"
+
+# Gunicorn with 4 workers, SSE support
+ExecStart=/var/www/sitemap-crawler/backend/venv/bin/gunicorn \
+    --workers 4 \
+    --bind 127.0.0.1:8000 \
+    --timeout 300 \
+    --worker-class sync \
+    --access-logfile /var/log/sitemap-crawler/access.log \
+    --error-logfile /var/log/sitemap-crawler/error.log \
+    --log-level info \
+    app:app
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
