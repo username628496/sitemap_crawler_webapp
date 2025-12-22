@@ -7,6 +7,13 @@ import sys
 import os
 import requests as http_requests
 
+# Monkey patch for gevent compatibility (must be first!)
+try:
+    from gevent import monkey
+    monkey.patch_all()
+except ImportError:
+    pass  # gevent not installed, skip patching
+
 # Add current directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -215,7 +222,10 @@ def crawl_stream():
 
     logger.info(f"🚀 Starting real-time SSE stream for {len(domain_list)} domains")
 
-    return Response(stream_sync_results(domain_list), content_type='text/event-stream')
+    response = Response(stream_sync_results(domain_list), content_type='text/event-stream')
+    response.headers['Cache-Control'] = 'no-cache'
+    response.headers['X-Accel-Buffering'] = 'no'
+    return response
 
 @app.route('/api/history')
 def get_history():
