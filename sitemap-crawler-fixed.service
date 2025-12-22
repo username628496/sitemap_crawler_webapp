@@ -1,0 +1,39 @@
+[Unit]
+Description=Sitemap Crawler Backend with SSE Support
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/sitemap-crawler/backend
+Environment="PATH=/var/www/sitemap-crawler/backend/venv/bin"
+Environment="PYTHONPATH=/var/www/sitemap-crawler/backend"
+Environment="FLASK_ENV=production"
+
+# Use Gunicorn instead of Flask dev server for production
+# Flask dev server (python app.py) không tốt cho production và SSE
+ExecStart=/var/www/sitemap-crawler/backend/venv/bin/gunicorn \
+    --workers 1 \
+    --bind 127.0.0.1:8000 \
+    --timeout 3600 \
+    --worker-class gevent \
+    --worker-connections 1000 \
+    --keep-alive 5 \
+    --access-logfile /var/log/sitemap-crawler/access.log \
+    --error-logfile /var/log/sitemap-crawler/error.log \
+    --log-level info \
+    app:app
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Resource limits (optional but recommended)
+LimitNOFILE=65536
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
