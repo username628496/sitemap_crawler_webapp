@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { CheckCircle2, Send, Loader2, Coins } from 'lucide-react'
 import { useBatchSinbyte } from '../hooks/useBatchSinbyte'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -7,6 +8,11 @@ import toast from 'react-hot-toast'
 const CrawlResults = ({ results, onRefreshHistory }) => {
   const { isSubmitting, progress, submitBatch } = useBatchSinbyte()
   const { sinbyteApiKey } = useSettingsStore()
+
+  // Debug: log when results change
+  useEffect(() => {
+    console.log('CrawlResults: results updated, length:', results?.length || 0)
+  }, [results])
 
   if (!results || results.length === 0) return null
 
@@ -95,11 +101,16 @@ const CrawlResults = ({ results, onRefreshHistory }) => {
       {/* Results List (compact) */}
       <div className="space-y-2">
         {results.map((site, index) => (
-          <ResultCard
+          <div
             key={site?.id ?? `${site?.domain || 'unknown'}-${index}`}
-            site={site}
-            onRefreshHistory={onRefreshHistory}
-          />
+            className="animate-in fade-in slide-in-from-top-2 duration-300"
+            style={{ animationDelay: `${index * 50}ms` }}
+          >
+            <ResultCard
+              site={site}
+              onRefreshHistory={onRefreshHistory}
+            />
+          </div>
         ))}
       </div>
     </section>
