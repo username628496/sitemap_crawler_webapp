@@ -2,20 +2,7 @@
 
 ## ⚠️ CRITICAL - Phải sửa ngay
 
-- [ ] **Security: Remove hardcoded proxy credentials**
-  - File: `backend/config.py` lines 77-80
-  - Issue: Mật khẩu proxy hardcoded trong code
-  - Action: Xóa default values, chỉ dùng env vars
-  - Impact: Credentials đang exposed trong git history
-  ```python
-  # ❌ BAD
-  PROXY_PASSWORD = os.getenv('PROXY_PASSWORD', 'wIkN2o5b')
-
-  # ✅ GOOD
-  PROXY_PASSWORD = os.getenv('PROXY_PASSWORD')
-  if not PROXY_PASSWORD:
-      raise ValueError("PROXY_PASSWORD env var required")
-  ```
+_No critical issues at this time._
 
 ## 🔴 HIGH Priority - Sửa trong tuần này
 
@@ -338,7 +325,7 @@
 - [ ] Health check endpoint working
 - [ ] Monitoring/alerting setup
 - [ ] SSL certificates configured
-- [ ] Reverse proxy (nginx) configured
+- [ ] Reverse proxy (nginx) configured for routing
 - [ ] Firewall rules set
 - [ ] Auto-restart on crash (systemd/supervisor)
 - [ ] Resource limits set (memory, CPU)
@@ -383,7 +370,6 @@
 ## 🎉 What's Already Great
 
 ✅ SSE real-time streaming working perfectly
-✅ Proxy support for residential IPs
 ✅ Concurrent crawling with ThreadPoolExecutor
 ✅ Redirect chain tracking
 ✅ Clean architecture (separation of concerns)

@@ -36,7 +36,7 @@ If **ALL** candidate URLs return 403, it detects IP blocking:
 if forbidden_count > 0 and forbidden_count == total_attempts:
     raise Exception(
         f"Domain {domain} chặn IP datacenter (403 Forbidden). "
-        f"Domain này yêu cầu residential proxy hoặc crawl từ IP không phải datacenter. "
+        f"Domain này chặn IP từ datacenter và không thể crawl được. "
         f"Không thể bypass bằng user agent."
     )
 ```
@@ -47,7 +47,7 @@ if forbidden_count > 0 and forbidden_count == total_attempts:
 - ❌ "Không tìm thấy sitemap hợp lệ" (unclear what went wrong)
 
 ### After
-- ✅ "Domain chặn IP datacenter (403 Forbidden). Domain này yêu cầu residential proxy hoặc crawl từ IP không phải datacenter. Không thể bypass bằng user agent."
+- ✅ "Domain chặn IP datacenter (403 Forbidden). Domain này chặn IP từ datacenter và không thể crawl được. Không thể bypass bằng user agent."
 - ✅ Clear distinction between:
   1. Domains with no sitemap
   2. Domains blocking datacenter IPs
@@ -90,14 +90,10 @@ Examples of domains that block datacenter IPs:
 - Anti-bot protected e-commerce sites
 
 ### Solutions
-1. **Residential Proxy Service** (costs money)
-   - Services like BrightData, Smartproxy, Oxylabs
-   - Use real residential IPs (home/mobile connections)
-
-2. **Crawl from home/office IP**
+1. **Crawl from home/office IP**
    - Run crawler from non-datacenter connection
 
-3. **Accept limitation**
+2. **Accept limitation**
    - Skip these domains
    - Show clear error to user
 
@@ -112,7 +108,7 @@ curl -X GET "http://localhost:8000/api/crawl-stream?domains=33bet.com.vc"
 {
   "domain": "33bet.com.vc",
   "status": "error",
-  "message": "Domain 33bet.com.vc chặn IP datacenter (403 Forbidden). Domain này yêu cầu residential proxy hoặc crawl từ IP không phải datacenter. Không thể bypass bằng user agent."
+  "message": "Domain 33bet.com.vc chặn IP datacenter (403 Forbidden). Domain này chặn IP từ datacenter và không thể crawl được. Không thể bypass bằng user agent."
 }
 ```
 

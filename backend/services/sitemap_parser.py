@@ -206,14 +206,6 @@ class SitemapParser:
         self.session = requests.Session()
         self.session.headers.update(self.headers)
 
-        # Configure proxy if enabled
-        if Config.USE_PROXY and Config.PROXIES:
-            self.session.proxies.update(Config.PROXIES)
-            proxy_info = ', '.join([f"{k}: {v.split('@')[1] if '@' in v else v}" for k, v in Config.PROXIES.items()])
-            logger.info(f"🌐 Proxy enabled: {proxy_info}")
-        else:
-            logger.info("📡 Direct connection (no proxy)")
-
     def _rotate_user_agent(self):
         """Rotate to next user agent"""
         self.current_ua_index = (self.current_ua_index + 1) % len(self.user_agents)
@@ -246,8 +238,7 @@ class SitemapParser:
                         url,
                         self.headers,
                         self.timeout,
-                        verify=False,  # SSL verification OFF (many domains have invalid certs)
-                        proxies=Config.PROXIES if Config.USE_PROXY else None
+                        verify=False  # SSL verification OFF (many domains have invalid certs)
                     )
                     response.raise_for_status()
 
@@ -292,8 +283,7 @@ class SitemapParser:
                                 url,
                                 self.headers,
                                 self.timeout,
-                                verify=False,  # fallback SSL verify off
-                                proxies=Config.PROXIES if Config.USE_PROXY else None
+                                verify=False  # fallback SSL verify off
                             )
                             response.raise_for_status()
 
@@ -373,11 +363,16 @@ class SitemapParser:
             try:
                 # Use fast path (no redirect tracking) for discovery phase
                 content, chain = self.fetch_url(url, track_redirects=False)
-                if "sitemap" in url and self.is_valid_xml(content):
-                    logger.info(f"✅ Tìm thấy sitemap tại: {url}")
-                    sitemaps_found.append(url)
-                    final_domain = domain
-                    continue
+                if "sitemap" in url:
+                    is_valid = self.is_valid_xml(content)
+                    if is_valid:
+                        logger.info(f"✅ Tìm thấy sitemap tại: {url}")
+                        sitemaps_found.append(url)
+                        final_domain = domain
+                        continue
+                    else:
+                        logger.warning(f"⚠️ {url} không phải XML hợp lệ (first 200 chars: {content[:200]})")
+                        continue
 
                 # robots.txt special case
                 if "robots.txt" in url and "Sitemap:" in content:
@@ -414,7 +409,7 @@ class SitemapParser:
             )
             raise Exception(
                 f"Domain {domain} chặn IP datacenter (403 Forbidden). "
-                f"Domain này yêu cầu residential proxy hoặc crawl từ IP không phải datacenter. "
+                f"Domain này chặn IP từ datacenter và không thể crawl được. "
                 f"Không thể bypass bằng user agent."
             )
 

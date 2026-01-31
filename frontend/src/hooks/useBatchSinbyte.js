@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, createElement } from 'react'
 import { crawlAPI } from '../services/api'
 import toast from 'react-hot-toast'
+import { CheckCircle2, XCircle } from 'lucide-react'
 
 export const useBatchSinbyte = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -70,8 +71,9 @@ export const useBatchSinbyte = () => {
           response: result
         })
 
-        toast.success(`✓ ${crawl.domain}: ${urlsArray.length} URLs`, {
-          duration: 2000
+        toast.success(`${crawl.domain}: ${urlsArray.length} URLs`, {
+          duration: 2000,
+          icon: createElement(CheckCircle2, { className: "text-green-600", size: 18 })
         })
 
       } catch (error) {
@@ -83,8 +85,9 @@ export const useBatchSinbyte = () => {
           error: errorMsg
         })
 
-        toast.error(`✗ ${crawl.domain}: ${errorMsg}`, {
-          duration: 3000
+        toast.error(`${crawl.domain}: ${errorMsg}`, {
+          duration: 3000,
+          icon: createElement(XCircle, { className: "text-red-600", size: 18 })
         })
       }
 

@@ -70,23 +70,6 @@ class Config:
     # Timezone
     TIMEZONE = os.getenv('TIMEZONE', 'Asia/Ho_Chi_Minh')
 
-    # Proxy config - Residential Vietnam
-    USE_PROXY = os.getenv('USE_PROXY', 'true').lower() == 'true'
-
-    # Residential proxy credentials
-    PROXY_HOST = os.getenv('PROXY_HOST', '180.93.75.90')
-    PROXY_PORT = int(os.getenv('PROXY_PORT', 52916))
-    PROXY_USERNAME = os.getenv('PROXY_USERNAME', '3aga3gh3')
-    PROXY_PASSWORD = os.getenv('PROXY_PASSWORD', 'wIkN2o5b')
-
-    # Build proxy URL with authentication
-    PROXY_URL = f"http://{PROXY_USERNAME}:{PROXY_PASSWORD}@{PROXY_HOST}:{PROXY_PORT}"
-
-    PROXIES = {
-        "http": PROXY_URL,
-        "https": PROXY_URL,
-    } if USE_PROXY else None
-
     # Logging
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
     LOG_REDIRECTS = True

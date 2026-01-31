@@ -87,12 +87,6 @@ def health_check():
             "error": str(e)
         }
 
-    # Check proxy status
-    health_status["components"]["proxy"] = {
-        "enabled": Config.USE_PROXY,
-        "host": Config.PROXY_HOST if Config.USE_PROXY else None
-    }
-
     # Check configuration
     health_status["components"]["config"] = {
         "max_workers": Config.MAX_WORKERS,
@@ -130,7 +124,7 @@ def crawl():
             return jsonify({
                 "error": "Website chặn IP của chúng tôi",
                 "message": "Website này không cho phép truy cập từ IP datacenter",
-                "suggestion": "Sử dụng proxy residential hoặc thử lại sau"
+                "suggestion": "Domain này chặn IP datacenter và không thể crawl được"
             }), 403
         elif "timeout" in error_msg.lower():
             return jsonify({
