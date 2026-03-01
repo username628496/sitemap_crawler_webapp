@@ -74,7 +74,22 @@ echo "🔧 Step 6: Executing deployment commands on VPS..."
 ssh "$VPS_USER@$VPS_HOST" << 'ENDSSH'
 set -e
 
-echo "📋 On VPS: Installing backend dependencies..."
+echo "📥 On VPS: Pulling latest code from GitHub..."
+cd /var/www/sitemap-crawler
+
+# Backup databases before pulling
+echo "💾 Backing up databases..."
+cd backend
+cp crawl_history.db crawl_history.db.backup.$(date +%Y%m%d_%H%M%S) 2>/dev/null || echo "No sitemap history to backup"
+cp gp_content_history.db gp_content_history.db.backup.$(date +%Y%m%d_%H%M%S) 2>/dev/null || echo "No GP content history to backup"
+cd ..
+
+# Pull from GitHub
+git stash 2>/dev/null || true
+git pull origin main
+echo "✅ Code updated from GitHub"
+
+echo "📋 Installing backend dependencies..."
 cd /var/www/sitemap-crawler/backend
 
 # Create virtual environment if not exists
