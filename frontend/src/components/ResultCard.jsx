@@ -43,22 +43,22 @@ const ResultCard = ({ site, onRefreshHistory }) => {
 
   const handleCopy = async () => {
     if (!urlsCount) {
-      toast.error('Không có URL nào để copy', { icon: <XCircle className="text-red-600" size={18} /> })
+      toast.error('Không có URL', { icon: <XCircle className="text-red-600" size={18} /> })
       return
     }
     try {
       await navigator.clipboard.writeText(allUrls.join('\n'))
-      toast.success(`Đã sao chép ${urlsCountText} URLs`, {
+      toast.success(`Đã copy ${urlsCountText} URLs`, {
         icon: <CheckCircle2 className="text-green-600" size={18} />,
       })
     } catch {
-      toast.error('Lỗi khi copy URLs', { icon: <XCircle className="text-red-600" size={18} /> })
+      toast.error('Lỗi khi copy', { icon: <XCircle className="text-red-600" size={18} /> })
     }
   }
 
   const handleExport = () => {
     if (!urlsCount) {
-      toast.error('Không có URL nào để export', { icon: <XCircle className="text-red-600" size={18} /> })
+      toast.error('Không có URL', { icon: <XCircle className="text-red-600" size={18} /> })
       return
     }
     try {
@@ -76,27 +76,27 @@ const ResultCard = ({ site, onRefreshHistory }) => {
         icon: <CheckCircle2 className="text-green-600" size={18} />,
       })
     } catch {
-      toast.error('Lỗi export CSV', { icon: <XCircle className="text-red-600" size={18} /> })
+      toast.error('Lỗi khi export', { icon: <XCircle className="text-red-600" size={18} /> })
     }
   }
 
   const handleSubmit = async () => {
     if (!sinbyteApiKey) {
-      toast.error('Vui lòng cài đặt Sinbyte API key trước', { icon: <XCircle className="text-red-600" size={18} /> })
+      toast.error('Chưa có API key', { icon: <XCircle className="text-red-600" size={18} /> })
       return
     }
     if (!urlsCount) {
-      toast.error('Không có URL nào để submit', { icon: <XCircle className="text-red-600" size={18} /> })
+      toast.error('Không có URL', { icon: <XCircle className="text-red-600" size={18} /> })
       return
     }
     try {
       await submitUrls(sinbyteApiKey, allUrls, `Crawl ${site.domain}`)
       onRefreshHistory?.()
-      toast.success('Đã submit lên Sinbyte', {
+      toast.success('Đã submit', {
         icon: <CheckCircle2 className="text-green-600" size={18} />,
       })
     } catch {
-      toast.error('Submit thất bại', { icon: <XCircle className="text-red-600" size={18} /> })
+      toast.error('Lỗi khi submit', { icon: <XCircle className="text-red-600" size={18} /> })
     }
   }
 
@@ -223,7 +223,12 @@ const ResultCard = ({ site, onRefreshHistory }) => {
                         </div>
                         <div className="text-xs text-yellow-700 dark:text-yellow-400">
                           Max redirects: {site.redirect_info.max_redirects}
-                          {site.redirect_info.has_loops && <span className="ml-2 text-red-600 dark:text-red-400 font-semibold">⚠️ Phát hiện redirect loop!</span>}
+                          {site.redirect_info.has_loops && (
+                            <span className="ml-2 inline-flex items-center gap-1 text-red-600 dark:text-red-400 font-semibold">
+                              <AlertTriangle size={12} />
+                              Redirect loop!
+                            </span>
+                          )}
                         </div>
 
                         {/* Show first few redirect chains */}
@@ -257,8 +262,9 @@ const ResultCard = ({ site, onRefreshHistory }) => {
                                     ))}
                                   </div>
                                   {chain.has_loop && (
-                                    <div className="mt-1 text-xs text-red-600 dark:text-red-400 font-medium">
-                                      ⚠️ Loop detected at hop {chain.loop_at}
+                                    <div className="mt-1 inline-flex items-center gap-1 text-xs text-red-600 dark:text-red-400 font-medium">
+                                      <AlertTriangle size={12} />
+                                      Loop at hop {chain.loop_at}
                                     </div>
                                   )}
                                 </div>

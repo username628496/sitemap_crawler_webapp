@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, createElement } from 'react'
 import { crawlAPI } from '../services/api'
 import toast from 'react-hot-toast'
+import { CheckCircle2, XCircle } from 'lucide-react'
 
 export const useCrawl = () => {
   const [isLoading, setIsLoading] = useState(false)
@@ -66,11 +67,17 @@ export const useCrawl = () => {
 
             // Show appropriate toast based on results
             if (successCount === 0) {
-              toast.error(`Crawl thất bại: Tất cả ${domains.length} domain đều lỗi`)
+              toast.error(`Tất cả ${domains.length} domain lỗi`, {
+                icon: createElement(XCircle, { className: "text-red-600", size: 18 })
+              })
             } else if (failedCount === 0) {
-              toast.success(`Crawl hoàn tất: Tất cả ${domains.length} domain thành công`)
+              toast.success(`${domains.length} domain thành công`, {
+                icon: createElement(CheckCircle2, { className: "text-green-600", size: 18 })
+              })
             } else {
-              toast.success(`Crawl hoàn tất: ${successCount}/${domains.length} thành công, ${failedCount} thất bại`)
+              toast.success(`${successCount}/${domains.length} thành công`, {
+                icon: createElement(CheckCircle2, { className: "text-green-600", size: 18 })
+              })
             }
 
             console.log('useCrawl: About to call onComplete, exists?', !!onComplete)
@@ -89,7 +96,9 @@ export const useCrawl = () => {
       console.error('useCrawl: EventSource error:', error)
       eventSource.close()
       setIsLoading(false)
-      toast.error('Lỗi kết nối. Vui lòng thử lại.')
+      toast.error('Lỗi kết nối', {
+        icon: createElement(XCircle, { className: "text-red-600", size: 18 })
+      })
     }
   }, [])
 

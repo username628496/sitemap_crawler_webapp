@@ -1,9 +1,16 @@
 import { useState, useMemo } from 'react'
-import { List, Rocket, Loader2, Copy, FileDown, ExternalLink, CheckCircle2, XCircle } from 'lucide-react'
+import { List, Rocket, Loader2, Copy, FileDown, ExternalLink, CheckCircle2, XCircle, Search } from 'lucide-react'
 import { useCrawl } from '../hooks/useCrawl'
 import toast from 'react-hot-toast'
 
-const CrawlForm = ({ onCrawlComplete, onResultUpdate, crawlResults, onClearResults }) => {
+const CrawlForm = ({
+  onCrawlComplete,
+  onResultUpdate,
+  crawlResults,
+  onClearResults,
+  onGPContentCrawl,
+  isGPContentLoading
+}) => {
   const [domains, setDomains] = useState('')
   const { isLoading, progress, startCrawl } = useCrawl()
 
@@ -18,6 +25,18 @@ const CrawlForm = ({ onCrawlComplete, onResultUpdate, crawlResults, onClearResul
     onClearResults?.()
     // ✅ Pass both callbacks: onComplete and onResultUpdate
     startCrawl(domainList, onCrawlComplete, onResultUpdate)
+  }
+
+  const handleGPContentCrawl = () => {
+    const domainList = domains.trim().split(/\n+/).filter(d => d.trim())
+    if (!domainList.length) {
+      toast.error('Vui lòng nhập ít nhất 1 domain', {
+        icon: <XCircle className="text-red-600" size={18} />
+      })
+      return
+    }
+    // Pass domains to parent
+    onGPContentCrawl(domainList)
   }
 
   const allUrls = useMemo(() => {
@@ -160,18 +179,35 @@ const CrawlForm = ({ onCrawlComplete, onResultUpdate, crawlResults, onClearResul
         </a>
 
         <button
+          onClick={handleGPContentCrawl}
+          disabled={isGPContentLoading || !domains.trim()}
+          className="ml-auto inline-flex items-center justify-center gap-1.5 h-9 px-4
+                     bg-gradient-to-r from-purple-500 via-purple-600 to-indigo-600
+                     hover:from-purple-600 hover:via-indigo-600 hover:to-indigo-700
+                     text-white text-xs font-bold rounded-md shadow-md hover:shadow-lg
+                     focus:outline-none focus:ring-2 focus:ring-purple-400/60
+                     disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none
+                     transition-all duration-200 transform hover:scale-[1.02]"
+          title="Crawl content: URL + Title + Keywords"
+        >
+          {isGPContentLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+          {isGPContentLoading ? 'Crawling...' : 'Crawl Content (GP)'}
+        </button>
+
+        <button
           onClick={handleCrawl}
           disabled={isLoading || !domains.trim()}
-          className="ml-auto inline-flex items-center justify-center gap-1.5 h-9 px-4
+          className="inline-flex items-center justify-center gap-1.5 h-9 px-4
                      bg-gradient-to-r from-orange-500 via-orange-600 to-red-500
                      hover:from-orange-600 hover:via-red-600 hover:to-red-600
                      text-white text-xs font-bold rounded-md shadow-md hover:shadow-lg
                      focus:outline-none focus:ring-2 focus:ring-orange-400/60
                      disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none
                      transition-all duration-200 transform hover:scale-[1.02]"
+          title="Crawl sitemap: URLs only"
         >
           {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Rocket size={14} />}
-          {isLoading ? 'Đang crawl...' : 'Crawl'}
+          {isLoading ? 'Đang crawl...' : 'Crawl Sitemap'}
         </button>
       </div>
     </div>

@@ -20,6 +20,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from config import config, Config
 from utils.logger import logger
 from services.crawler_service import CrawlerService
+from services.content_crawler_service import ContentCrawlerService
 from services.history_service import HistoryService
 from models.database import DatabaseManager
 
@@ -47,6 +48,7 @@ app.config.from_object(app_config)
 # Initialize services
 db_manager = DatabaseManager()
 crawler_service = CrawlerService(db_manager)
+content_crawler_service = ContentCrawlerService()
 history_service = HistoryService(db_manager)
 
 logger.info("✅ Application initialized with Sync Crawler (requests)")
@@ -282,23 +284,84 @@ def export_history():
     try:
         export_format = request.args.get("format", "csv")
         days = min(int(request.args.get("days", 30)), 365)
-        
+
         if export_format == "json":
             history_data = history_service.get_history(limit=1000, offset=0)
             return jsonify(history_data)
-        
+
         # CSV export
         csv_data = history_service.export_to_csv(days=days)
-        
+
         return Response(
             csv_data,
             mimetype="text/csv",
             headers={"Content-Disposition": "attachment; filename=crawl_history.csv"}
         )
-        
+
     except Exception as e:
         logger.error(f"Error in /api/history/export: {e}")
         return jsonify({"error": f"Lỗi export: {str(e)}"}), 500
+
+# ─── GP Content History Endpoints ──────────────────────────────────────
+
+@app.route('/api/gp-content/history')
+def get_gp_content_history():
+    """Get GP Content crawl history with filters"""
+    try:
+        limit = min(int(request.args.get("limit", Config.DEFAULT_HISTORY_LIMIT)), Config.MAX_HISTORY_LIMIT)
+        offset = max(int(request.args.get("offset", 0)), 0)
+        domain_filter = request.args.get("domain")
+        status_filter = request.args.get("status")
+        date_from = request.args.get("date_from")
+        date_to = request.args.get("date_to")
+        include_urls = request.args.get("include_urls", "false").lower() == "true"
+
+        result = history_service.get_gp_content_history(
+            limit=limit,
+            offset=offset,
+            domain_filter=domain_filter,
+            status_filter=status_filter,
+            date_from=date_from,
+            date_to=date_to,
+            include_urls=include_urls
+        )
+
+        return jsonify(result)
+
+    except ValueError as e:
+        logger.error(f"Validation error in /api/gp-content/history: {e}")
+        return jsonify({"error": f"Invalid parameters: {str(e)}"}), 400
+    except Exception as e:
+        logger.error(f"Error in /api/gp-content/history: {e}")
+        return jsonify({
+            "error": f"Lỗi lấy lịch sử GP Content: {str(e)}",
+            "results": [],
+            "total": 0
+        }), 500
+
+@app.route('/api/gp-content/history/<int:session_id>')
+def get_gp_content_session_details(session_id):
+    """Get detailed URLs for a specific GP Content session"""
+    try:
+        result = history_service.get_gp_content_history(
+            limit=1,
+            offset=0,
+            include_urls=True
+        )
+
+        # Find the specific session
+        session = next((s for s in result['results'] if s['id'] == session_id), None)
+
+        if not session:
+            return jsonify({"error": "Session not found"}), 404
+
+        return jsonify(session)
+
+    except Exception as e:
+        logger.error(f"Error in /api/gp-content/history/{session_id}: {e}")
+        return jsonify({"error": f"Lỗi lấy chi tiết session: {str(e)}"}), 500
+
+# ─────────────────────────────────────────────────────────────────────────
 
 @app.route('/api/export', methods=['POST'])
 def export_urls():
@@ -377,6 +440,148 @@ def sinbyte_submit():
     except Exception as e:
         logger.error(f"Unexpected error in Sinbyte proxy: {e}")
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/gp-content/crawl-stream')
+def gp_content_crawl_stream():
+    """
+    GP Content Crawler with SSE streaming.
+
+    Crawls sitemap first (internal), then crawls each URL for content.
+    Returns: URL + Title + Keywords in real-time via SSE.
+
+    Query params:
+        domains: Comma-separated list of domains (e.g., ?domains=example.com,google.com)
+    """
+    from queue import Queue
+    from threading import Thread
+
+    def stream_content_results(domains):
+        """Stream content crawl results in real-time"""
+        result_queue = Queue()
+
+        def url_callback(result, completed, total):
+            """Callback for each URL crawled"""
+            # Put individual URL result in queue
+            result_queue.put({
+                'type': 'url_result',
+                'data': result,  # {url, title, keywords, status, duration}
+                'progress': {
+                    'completed': completed,
+                    'total': total,
+                    'percentage': round((completed / total) * 100, 1) if total > 0 else 0
+                }
+            })
+
+        def domain_callback(domain_result, completed_domains, total_domains):
+            """Callback for each domain completed"""
+            result_queue.put({
+                'type': 'domain_complete',
+                'data': domain_result,
+                'progress': {
+                    'completed_domains': completed_domains,
+                    'total_domains': total_domains
+                }
+            })
+
+        def crawl_worker():
+            """Run content crawler in background thread"""
+            try:
+                logger.info(f"🚀 [GP Content] Starting crawl for {len(domains)} domains")
+
+                for i, domain in enumerate(domains):
+                    domain = domain.strip()
+                    if not domain:
+                        continue
+
+                    # Send domain start notification
+                    result_queue.put({
+                        'type': 'domain_start',
+                        'domain': domain,
+                        'current': i + 1,
+                        'total': len(domains)
+                    })
+
+                    # Crawl this domain
+                    domain_result = content_crawler_service.discover_and_crawl_domain(
+                        domain,
+                        callback=url_callback
+                    )
+
+                    # Send domain completion
+                    domain_callback(domain_result, i + 1, len(domains))
+
+                # All done
+                result_queue.put({'type': 'done'})
+
+            except Exception as e:
+                logger.error(f"❌ [GP Content] Crawler error: {e}")
+                result_queue.put({'type': 'error', 'message': str(e)})
+
+        # Start crawler in background
+        Thread(target=crawl_worker, daemon=True).start()
+
+        # Send initial message
+        yield f"data: {json.dumps({'status': 'starting', 'message': 'Khởi động GP Content Crawler...', 'total_domains': len(domains)})}\n\n"
+
+        # Stream results as they arrive
+        while True:
+            item = result_queue.get()
+
+            if item['type'] == 'domain_start':
+                # Starting a new domain
+                yield f"data: {json.dumps({'status': 'domain_start', 'domain': item['domain'], 'current': item['current'], 'total': item['total']})}\n\n"
+                logger.info(f"📤 [GP Content] Starting domain {item['domain']} ({item['current']}/{item['total']})")
+
+            elif item['type'] == 'url_result':
+                # Individual URL result
+                yield f"data: {json.dumps(item['data'])}\n\n"
+                url = item['data'].get('original_url') or item['data'].get('url', 'unknown')
+                logger.info(f"📤 [GP Content] Streamed URL result: {url} ({item['progress']['completed']}/{item['progress']['total']})")
+
+            elif item['type'] == 'domain_complete':
+                # Domain completed
+                result = item['data']
+                response_data = {
+                    'status': 'domain_complete',
+                    'domain': result['domain'],
+                    'crawled_urls': result['crawled_urls'],
+                    'total_urls': result['total_urls'],
+                    'original_domain': result.get('original_domain', result['domain']),
+                    'target_domain': result.get('target_domain', result['domain']),
+                    'has_redirect': result.get('has_redirect', False)
+                }
+                yield f"data: {json.dumps(response_data)}\n\n"
+                logger.info(f"✅ [GP Content] Domain complete: {result['domain']} ({result['crawled_urls']}/{result['total_urls']} URLs)")
+
+            elif item['type'] == 'done':
+                # All done
+                yield f"data: {json.dumps({'status': 'completed', 'message': 'Tất cả domains đã crawl xong'})}\n\n"
+                logger.info("✅ [GP Content] Stream completed")
+                break
+
+            elif item['type'] == 'error':
+                # Error occurred
+                yield f"data: {json.dumps({'status': 'error', 'message': item['message']})}\n\n"
+                logger.error(f"❌ [GP Content] Stream error: {item['message']}")
+                break
+
+    # Parse domains from query params
+    domains_param = request.args.get("domains", "")
+    domain_list = [d.strip() for d in domains_param.split(",") if d.strip()]
+
+    if not domain_list:
+        return jsonify({
+            "error": "Không có domain để crawl",
+            "message": "Vui lòng nhập ít nhất một domain",
+            "suggestion": "Format: ?domains=example.com,google.com"
+        }), 400
+
+    logger.info(f"🚀 [GP Content] Starting SSE stream for {len(domain_list)} domains")
+
+    response = Response(stream_content_results(domain_list), content_type='text/event-stream')
+    response.headers['Cache-Control'] = 'no-cache'
+    response.headers['X-Accel-Buffering'] = 'no'
+    return response
 
 # Error handlers
 @app.errorhandler(404)

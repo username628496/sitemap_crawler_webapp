@@ -18,7 +18,7 @@ const CrawlResults = ({ results, onRefreshHistory }) => {
 
   const handleBatchSubmit = async () => {
     if (!sinbyteApiKey) {
-      toast.error('Vui lòng cài đặt Sinbyte API key trước', { duration: 3000 })
+      toast.error('Chưa có API key', { duration: 3000 })
       return
     }
     const result = await submitBatch(sinbyteApiKey, results)

@@ -5,6 +5,7 @@ from urllib.parse import urljoin, urlparse
 from typing import List, Tuple, Set, Optional
 from time import time, sleep
 from dataclasses import dataclass, asdict
+import gzip
 from config import Config
 from utils.logger import logger
 
@@ -214,6 +215,51 @@ class SitemapParser:
         self.session.headers['User-Agent'] = new_ua
         logger.info(f"🔄 Rotated to UA: {new_ua[:50]}...")
 
+    def _decompress_if_needed(self, response: requests.Response) -> str:
+        """
+        Decompress GZIP content if needed and return as UTF-8 text.
+
+        Args:
+            response: requests.Response object
+
+        Returns:
+            Decompressed text content
+        """
+        # First try response.text (handles most cases automatically)
+        content = response.text
+
+        # Check if content looks like binary garbage (GZIP compressed)
+        # GZIP files start with magic bytes 0x1f 0x8b
+        if response.content and len(response.content) > 2:
+            if response.content[0] == 0x1f and response.content[1] == 0x8b:
+                # Definitely GZIP compressed
+                try:
+                    decompressed = gzip.decompress(response.content)
+                    content = decompressed.decode('utf-8')
+                    logger.info(f"✅ Decompressed GZIP content ({len(response.content)} → {len(content)} bytes)")
+                    return content
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to decompress GZIP: {e}")
+                    return content
+
+        # Also check if text looks like garbage (non-printable characters)
+        if content and len(content) > 0:
+            # Count non-printable characters in first 100 chars
+            sample = content[:100]
+            non_printable = sum(1 for c in sample if ord(c) < 32 and c not in '\n\r\t')
+            if non_printable > len(sample) * 0.3:  # More than 30% garbage
+                # Likely compressed, try manual decompression
+                try:
+                    decompressed = gzip.decompress(response.content)
+                    content = decompressed.decode('utf-8')
+                    logger.info(f"✅ Decompressed suspicious content ({len(response.content)} → {len(content)} bytes)")
+                    return content
+                except:
+                    # Not GZIP or decompression failed, return original
+                    pass
+
+        return content
+
     # -------------------------------
     # Helper: Safe fetch with retries and redirect tracking
     # -------------------------------
@@ -255,7 +301,9 @@ class SitemapParser:
                     import random
                     sleep(random.uniform(0.2, 0.5))
 
-                    return response.text, chain
+                    # Decompress GZIP if needed
+                    content = self._decompress_if_needed(response)
+                    return content, chain
                 else:
                     # Fast path: use cloudscraper (bypasses Cloudflare automatically)
                     response = self.session.get(
@@ -270,7 +318,9 @@ class SitemapParser:
                     import random
                     sleep(random.uniform(0.2, 0.5))
 
-                    return response.text, None
+                    # Decompress GZIP if needed
+                    content = self._decompress_if_needed(response)
+                    return content, None
 
             except requests.exceptions.SSLError as e:
                 logger.warning(f"⚠️ SSL Error khi fetch {url}: {e}")
@@ -293,7 +343,9 @@ class SitemapParser:
                                     f"{chain.initial_url} → {chain.final_url}"
                                 )
 
-                            return response.text, chain
+                            # Decompress GZIP if needed
+                            content = self._decompress_if_needed(response)
+                            return content, chain
                         else:
                             # Fast path with SSL off
                             response = self.session.get(
@@ -303,7 +355,9 @@ class SitemapParser:
                                 verify=False
                             )
                             response.raise_for_status()
-                            return response.text, None
+                            # Decompress GZIP if needed
+                            content = self._decompress_if_needed(response)
+                            return content, None
                     except Exception as e2:
                         raise Exception(f"SSL fallback thất bại: {e2}")
 

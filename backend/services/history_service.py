@@ -34,20 +34,41 @@ class HistoryService:
         """Compare recent crawls for a domain"""
         return self.db.compare_crawls(domain=domain, limit=limit)
     
+    def get_gp_content_history(
+        self,
+        limit: int = 20,
+        offset: int = 0,
+        domain_filter: str = None,
+        status_filter: str = None,
+        date_from: str = None,
+        date_to: str = None,
+        include_urls: bool = False
+    ) -> Dict:
+        """Get GP Content crawl history with filters"""
+        return self.db.get_gp_content_history(
+            limit=limit,
+            offset=offset,
+            domain_filter=domain_filter,
+            status_filter=status_filter,
+            date_from=date_from,
+            date_to=date_to,
+            include_urls=include_urls
+        )
+
     def export_to_csv(self, days: int = 30) -> str:
         """Export history to CSV format"""
         try:
             history_data = self.db.get_history(limit=1000, offset=0)
-            
+
             output = StringIO()
             writer = csv.writer(output)
-            
+
             # Headers
             writer.writerow([
-                "Domain", "Timestamp", "Status", "Total URLs", 
+                "Domain", "Timestamp", "Status", "Total URLs",
                 "Duration (s)", "Sitemaps Found", "Error Message"
             ])
-            
+
             # Data
             for record in history_data["results"]:
                 writer.writerow([
@@ -59,10 +80,10 @@ class HistoryService:
                     record["sitemaps_found"],
                     record["error_message"] or ""
                 ])
-            
+
             logger.info(f"Exported {len(history_data['results'])} records to CSV")
             return output.getvalue()
-            
+
         except Exception as e:
             logger.error(f"Error exporting to CSV: {e}")
             raise

@@ -9,7 +9,7 @@ const SettingsModal = ({ onClose }) => {
 
   const handleSave = () => {
     setSinbyteApiKey(apiKey)
-    toast.success('Đã lưu cài đặt thành công', {
+    toast.success('Đã lưu', {
       icon: <CheckCircle2 className="text-green-600" size={18} />,
     })
     onClose()

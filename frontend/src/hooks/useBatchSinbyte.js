@@ -10,12 +10,16 @@ export const useBatchSinbyte = () => {
 
   const submitBatch = async (apikey, crawlResults) => {
     if (!apikey) {
-      toast.error('Vui lòng nhập Sinbyte API key trong cài đặt')
+      toast.error('Chưa có API key', {
+        icon: createElement(XCircle, { className: "text-red-600", size: 18 })
+      })
       return { success: false, error: 'Missing API key' }
     }
 
     if (!crawlResults || crawlResults.length === 0) {
-      toast.error('Không có kết quả crawl nào để submit')
+      toast.error('Không có kết quả', {
+        icon: createElement(XCircle, { className: "text-red-600", size: 18 })
+      })
       return { success: false, error: 'No results' }
     }
 
@@ -23,7 +27,9 @@ export const useBatchSinbyte = () => {
     const successfulCrawls = crawlResults.filter(r => r.status === 'success' && r.sitemaps && r.sitemaps.length > 0)
 
     if (successfulCrawls.length === 0) {
-      toast.error('Không có domain nào crawl thành công')
+      toast.error('Không có domain thành công', {
+        icon: createElement(XCircle, { className: "text-red-600", size: 18 })
+      })
       return { success: false, error: 'No successful crawls' }
     }
 
@@ -107,8 +113,9 @@ export const useBatchSinbyte = () => {
     const failCount = batchResults.filter(r => r.status === 'failed').length
 
     if (successCount > 0) {
-      toast.success(`Hoàn tất! ${successCount} thành công, ${failCount} thất bại`, {
-        duration: 4000
+      toast.success(`${successCount} thành công, ${failCount} thất bại`, {
+        duration: 3000,
+        icon: createElement(CheckCircle2, { className: "text-green-600", size: 18 })
       })
     }
 

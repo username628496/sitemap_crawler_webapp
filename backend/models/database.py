@@ -151,11 +151,47 @@ class DatabaseManager:
                 )
             ''')
 
+            # GP Content Crawler sessions table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS gp_content_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    domain TEXT NOT NULL,
+                    original_domain TEXT,
+                    target_domain TEXT,
+                    has_redirect BOOLEAN DEFAULT 0,
+                    timestamp DATETIME NOT NULL,
+                    status TEXT NOT NULL,
+                    total_urls INTEGER DEFAULT 0,
+                    crawled_urls INTEGER DEFAULT 0,
+                    duration_sec REAL DEFAULT 0,
+                    error_message TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            # GP Content URLs table (stores URL + Title + Keywords)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS gp_content_urls (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER,
+                    original_url TEXT NOT NULL,
+                    actual_url TEXT NOT NULL,
+                    title TEXT,
+                    keywords TEXT,
+                    crawl_duration REAL DEFAULT 0,
+                    FOREIGN KEY (session_id) REFERENCES gp_content_sessions (id)
+                )
+            ''')
+
             # Create indexes
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_domain ON crawl_sessions(domain)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_timestamp ON crawl_sessions(timestamp)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_status ON crawl_sessions(status)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_redirect_session ON redirect_chains(session_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_gp_domain ON gp_content_sessions(domain)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_gp_timestamp ON gp_content_sessions(timestamp)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_gp_status ON gp_content_sessions(status)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_gp_urls_session ON gp_content_urls(session_id)')
 
             logger.info("Database initialized successfully")
     
@@ -600,7 +636,218 @@ class DatabaseManager:
                     }
                 
                 return comparison
-                
+
         except Exception as e:
             logger.error(f"Error comparing crawls: {e}")
             return {"error": str(e)}
+
+    def save_gp_content_session(
+        self,
+        domain: str,
+        original_domain: str,
+        target_domain: str,
+        has_redirect: bool,
+        status: str,
+        total_urls: int,
+        crawled_urls: int,
+        duration: float,
+        url_results: List[Dict] = None,
+        error_message: str = None,
+        timestamp_override: str = None
+    ) -> Optional[int]:
+        """
+        Save GP Content crawl session to database
+
+        Args:
+            domain: Display domain (usually original_domain)
+            original_domain: User input domain
+            target_domain: Actual domain after redirect
+            has_redirect: Whether domain redirect occurred
+            status: 'success' or 'failed'
+            total_urls: Total URLs found in sitemap
+            crawled_urls: Successfully crawled URLs
+            duration: Crawl duration in seconds
+            url_results: List of {original_url, actual_url, title, keywords, duration}
+            error_message: Error message if failed
+            timestamp_override: Optional timestamp override
+
+        Returns:
+            session_id if successful, None otherwise
+        """
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+
+                tz = pytz.timezone(Config.TIMEZONE)
+                if timestamp_override:
+                    timestamp = timestamp_override
+                else:
+                    timestamp = datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S')
+
+                # Insert main session
+                cursor.execute('''
+                    INSERT INTO gp_content_sessions
+                    (domain, original_domain, target_domain, has_redirect, timestamp,
+                     status, total_urls, crawled_urls, duration_sec, error_message)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    domain, original_domain, target_domain, has_redirect, timestamp,
+                    status, total_urls, crawled_urls, duration, error_message
+                ))
+
+                session_id = cursor.lastrowid
+
+                # Insert URL details
+                if url_results:
+                    for url_data in url_results:
+                        cursor.execute('''
+                            INSERT INTO gp_content_urls
+                            (session_id, original_url, actual_url, title, keywords, crawl_duration)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        ''', (
+                            session_id,
+                            url_data.get('original_url', ''),
+                            url_data.get('actual_url', ''),
+                            url_data.get('title', ''),
+                            url_data.get('keywords', ''),
+                            url_data.get('duration', 0)
+                        ))
+
+                logger.info(f"Saved GP Content session {session_id} for domain {domain} ({crawled_urls}/{total_urls} URLs)")
+                return session_id
+
+        except Exception as e:
+            logger.error(f"Error saving GP Content session: {e}")
+            return None
+
+    def get_gp_content_history(
+        self,
+        limit: int = 20,
+        offset: int = 0,
+        domain_filter: str = None,
+        status_filter: str = None,
+        date_from: str = None,
+        date_to: str = None,
+        include_urls: bool = False
+    ) -> Dict:
+        """
+        Get GP Content crawl history with filtering
+
+        Args:
+            limit: Number of records per page
+            offset: Pagination offset
+            domain_filter: Filter by domain (partial match)
+            status_filter: Filter by status
+            date_from: Filter by start date
+            date_to: Filter by end date
+            include_urls: Whether to include URL details (can be heavy)
+
+        Returns:
+            {results: [...], total: int, limit: int, offset: int, filters_applied: {...}}
+        """
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+
+                where_conditions = []
+                params = []
+
+                if domain_filter:
+                    where_conditions.append("(domain LIKE ? OR original_domain LIKE ?)")
+                    params.extend([f"%{domain_filter}%", f"%{domain_filter}%"])
+
+                if status_filter:
+                    where_conditions.append("status = ?")
+                    params.append(status_filter)
+
+                if date_from:
+                    where_conditions.append("DATE(timestamp) >= ?")
+                    params.append(date_from)
+
+                if date_to:
+                    where_conditions.append("DATE(timestamp) <= ?")
+                    params.append(date_to)
+
+                where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
+
+                # Get total count
+                count_query = f"SELECT COUNT(*) FROM gp_content_sessions {where_clause}"
+                cursor.execute(count_query, params)
+                total_count = cursor.fetchone()[0]
+
+                # Get paginated results
+                main_query = f'''
+                    SELECT id, domain, original_domain, target_domain, has_redirect,
+                           timestamp, status, total_urls, crawled_urls, duration_sec, error_message
+                    FROM gp_content_sessions
+                    {where_clause}
+                    ORDER BY timestamp DESC
+                    LIMIT ? OFFSET ?
+                '''
+
+                cursor.execute(main_query, params + [limit, offset])
+                sessions = cursor.fetchall()
+
+                if not sessions:
+                    return {
+                        "results": [],
+                        "total": total_count,
+                        "limit": limit,
+                        "offset": offset,
+                        "filters_applied": {
+                            "domain": domain_filter,
+                            "status": status_filter,
+                            "date_from": date_from,
+                            "date_to": date_to
+                        }
+                    }
+
+                results = []
+                for session in sessions:
+                    session_dict = dict(session)
+                    session_id = session_dict['id']
+
+                    # Optionally include URL details
+                    if include_urls:
+                        cursor.execute('''
+                            SELECT original_url, actual_url, title, keywords, crawl_duration
+                            FROM gp_content_urls
+                            WHERE session_id = ?
+                            ORDER BY id
+                        ''', (session_id,))
+
+                        urls = cursor.fetchall()
+                        session_dict['urls'] = [
+                            {
+                                "original_url": url['original_url'],
+                                "actual_url": url['actual_url'],
+                                "title": url['title'],
+                                "keywords": url['keywords'],
+                                "crawl_duration": url['crawl_duration']
+                            } for url in urls
+                        ]
+                    else:
+                        # Just get count for performance
+                        cursor.execute('''
+                            SELECT COUNT(*) FROM gp_content_urls WHERE session_id = ?
+                        ''', (session_id,))
+                        session_dict['url_count'] = cursor.fetchone()[0]
+
+                    results.append(session_dict)
+
+                return {
+                    "results": results,
+                    "total": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "filters_applied": {
+                        "domain": domain_filter,
+                        "status": status_filter,
+                        "date_from": date_from,
+                        "date_to": date_to
+                    }
+                }
+
+        except Exception as e:
+            logger.error(f"Error getting GP Content history: {e}")
+            return {"results": [], "total": 0, "limit": limit, "offset": offset}
