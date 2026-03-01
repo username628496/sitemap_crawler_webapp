@@ -29,7 +29,7 @@ export const useGPContentCrawl = () => {
 
     const domainsParam = domains.join(',')
     const eventSource = new EventSource(
-      `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/gp-content/crawl-stream?domains=${encodeURIComponent(domainsParam)}`
+      `/api/gp-content/crawl-stream?domains=${encodeURIComponent(domainsParam)}`
     )
 
     const tempResults = []
