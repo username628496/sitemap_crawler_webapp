@@ -1,13 +1,15 @@
 import { useEffect } from 'react'
 import { CheckCircle2, Send, Loader2, Coins } from 'lucide-react'
 import { useBatchSinbyte } from '../hooks/useBatchSinbyte'
+import { useBatch1hping } from '../hooks/useBatch1hping'
 import { useSettingsStore } from '../stores/settingsStore'
 import ResultCard from './ResultCard'
 import toast from 'react-hot-toast'
 
 const CrawlResults = ({ results, onRefreshHistory }) => {
-  const { isSubmitting, progress, submitBatch } = useBatchSinbyte()
-  const { sinbyteApiKey } = useSettingsStore()
+  const { isSubmitting: sinbyteSubmitting, progress: sinbyteProgress, submitBatch: sinbyteSubmitBatch } = useBatchSinbyte()
+  const { isSubmitting: onehpingSubmitting, progress: onehpingProgress, submitBatch: onehpingSubmitBatch } = useBatch1hping()
+  const { sinbyteApiKey, onehpingApiKey } = useSettingsStore()
 
   // Debug: log when results change
   useEffect(() => {
@@ -16,29 +18,39 @@ const CrawlResults = ({ results, onRefreshHistory }) => {
 
   if (!results || results.length === 0) return null
 
-  const handleBatchSubmit = async () => {
+  const handleSinbyteSubmit = async () => {
     if (!sinbyteApiKey) {
-      toast.error('Chưa có API key', { duration: 3000 })
+      toast.error('Chưa có API key Sinbyte', { duration: 3000 })
       return
     }
-    const result = await submitBatch(sinbyteApiKey, results)
+    const result = await sinbyteSubmitBatch(sinbyteApiKey, results)
+    if (result?.success && onRefreshHistory) {
+      setTimeout(() => onRefreshHistory(), 1000)
+    }
+  }
+
+  const handle1hpingSubmit = async () => {
+    if (!onehpingApiKey) {
+      toast.error('Chưa có API key 1hping', { duration: 3000 })
+      return
+    }
+    const result = await onehpingSubmitBatch(onehpingApiKey, results)
     if (result?.success && onRefreshHistory) {
       setTimeout(() => onRefreshHistory(), 1000)
     }
   }
 
   const successfulCrawls = results.filter(r => r?.status === 'success')
-
   const totalUrls = successfulCrawls.reduce((sum, r) => sum + (r?.total_urls || 0), 0)
-
-  // 2 credit cho 1 URL
   const estimatedCredits = totalUrls * 3
+
+  const isAnySubmitting = sinbyteSubmitting || onehpingSubmitting
 
   return (
     <section id="crawl-results" className="space-y-3 scroll-mt-6">
       {/* Header compact */}
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-md">
-        <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between gap-3">
+        <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between gap-3 flex-wrap">
           {/* Left: title + summary */}
           <div className="flex items-center gap-2 min-w-0">
             <CheckCircle2 className="text-green-600 dark:text-green-400" size={18} />
@@ -59,39 +71,57 @@ const CrawlResults = ({ results, onRefreshHistory }) => {
             </div>
           </div>
 
-          {/* Right: credits + submit */}
-          <div className="flex items-center gap-2">
+          {/* Right: credits + submit buttons */}
+          <div className="flex items-center gap-2 flex-wrap">
             {/* Estimated credits */}
             <div
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-amber-200 dark:border-amber-800
-                         bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 text-xs font-medium"
-              title="Ước tính credit cần thiết (2 credit/URL)"
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-amber-200 dark:border-amber-800
+                         bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-xs font-medium"
+              title="Ước tính credit cần thiết"
             >
               <Coins size={14} />
               {estimatedCredits.toLocaleString()} credits
             </div>
 
-            {/* Submit All */}
-            {isSubmitting ? (
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-md text-xs font-medium">
-                <Loader2 className="animate-spin text-blue-600" size={14} />
-                Đang submit {progress?.current ?? 0}/{progress?.total ?? 0}
+            {/* Sinbyte Submit All */}
+            {sinbyteSubmitting ? (
+              <div className="inline-flex items-center gap-1.5 h-7 px-2.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-md text-xs font-medium">
+                <Loader2 className="animate-spin" size={12} />
+                <span>Sinbyte {sinbyteProgress?.current ?? 0}/{sinbyteProgress?.total ?? 0}</span>
               </div>
             ) : (
               <button
-                onClick={handleBatchSubmit}
-                disabled={successfulCrawls.length === 0 || !sinbyteApiKey}
-                className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-medium rounded-md
-                           focus:outline-none focus:ring-1 focus:ring-blue-400/40 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                title={
-                  !sinbyteApiKey
-                    ? 'Vui lòng cài đặt API key trước'
-                    : `Submit tất cả ${successfulCrawls.length} domains`
-                }
+                onClick={handleSinbyteSubmit}
+                disabled={successfulCrawls.length === 0 || !sinbyteApiKey || isAnySubmitting}
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border
+                           bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800
+                           hover:bg-blue-100 dark:hover:bg-blue-900/40
+                           focus:outline-none focus:ring-1 focus:ring-blue-400/40 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                title={!sinbyteApiKey ? 'Vui lòng cài đặt API key Sinbyte' : `Submit lên Sinbyte (${successfulCrawls.length} domains)`}
               >
-                <Send size={14} />
-                <span className="hidden sm:inline">Submit All</span>
-                <span className="sm:hidden">Submit</span>
+                <Send size={12} />
+                <span>Sinbyte</span>
+              </button>
+            )}
+
+            {/* 1hping Submit All */}
+            {onehpingSubmitting ? (
+              <div className="inline-flex items-center gap-1.5 h-7 px-2.5 bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-300 border border-orange-200 dark:border-orange-800 rounded-md text-xs font-medium">
+                <Loader2 className="animate-spin" size={12} />
+                <span>1hping {onehpingProgress?.current ?? 0}/{onehpingProgress?.total ?? 0}</span>
+              </div>
+            ) : (
+              <button
+                onClick={handle1hpingSubmit}
+                disabled={successfulCrawls.length === 0 || !onehpingApiKey || isAnySubmitting}
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border
+                           bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800
+                           hover:bg-orange-100 dark:hover:bg-orange-900/40
+                           focus:outline-none focus:ring-1 focus:ring-orange-400/40 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                title={!onehpingApiKey ? 'Vui lòng cài đặt API key 1hping' : `Submit lên 1hping (${successfulCrawls.length} domains)`}
+              >
+                <Send size={12} />
+                <span>1hping</span>
               </button>
             )}
           </div>

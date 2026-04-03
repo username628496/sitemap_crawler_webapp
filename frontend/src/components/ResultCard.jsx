@@ -13,6 +13,7 @@ import {
   ArrowRight,
 } from 'lucide-react'
 import { useSinbyte } from '../hooks/useSinbyte'
+import { use1hping } from '../hooks/use1hping'
 import { useSettingsStore } from '../stores/settingsStore'
 import toast from 'react-hot-toast'
 import SitemapSection from './SitemapSection'
@@ -20,8 +21,10 @@ import SitemapSection from './SitemapSection'
 const ResultCard = ({ site, onRefreshHistory }) => {
   const [expanded, setExpanded] = useState(false)
   const [expandedSitemaps, setExpandedSitemaps] = useState({})
-  const { isSubmitting, submitUrls } = useSinbyte()
-  const { sinbyteApiKey } = useSettingsStore()
+  const { isSubmitting: sinbyteSubmitting, submitUrls: sinbyteSubmitUrls } = useSinbyte()
+  const { isSubmitting: onehpingSubmitting, submitUrls: onehpingSubmitUrls } = use1hping()
+  const { sinbyteApiKey, onehpingApiKey } = useSettingsStore()
+  const isSubmitting = sinbyteSubmitting || onehpingSubmitting
 
   if (!site) return null
 
@@ -80,9 +83,9 @@ const ResultCard = ({ site, onRefreshHistory }) => {
     }
   }
 
-  const handleSubmit = async () => {
+  const handleSinbyteSubmit = async () => {
     if (!sinbyteApiKey) {
-      toast.error('Chưa có API key', { icon: <XCircle className="text-red-600" size={18} /> })
+      toast.error('Chưa có API key Sinbyte', { icon: <XCircle className="text-red-600" size={18} /> })
       return
     }
     if (!urlsCount) {
@@ -90,13 +93,27 @@ const ResultCard = ({ site, onRefreshHistory }) => {
       return
     }
     try {
-      await submitUrls(sinbyteApiKey, allUrls, `Crawl ${site.domain}`)
+      await sinbyteSubmitUrls(sinbyteApiKey, allUrls, `Crawl ${site.domain}`)
       onRefreshHistory?.()
-      toast.success('Đã submit', {
-        icon: <CheckCircle2 className="text-green-600" size={18} />,
-      })
     } catch {
-      toast.error('Lỗi khi submit', { icon: <XCircle className="text-red-600" size={18} /> })
+      // error toast handled inside hook
+    }
+  }
+
+  const handle1hpingSubmit = async () => {
+    if (!onehpingApiKey) {
+      toast.error('Chưa có API key 1hping', { icon: <XCircle className="text-red-600" size={18} /> })
+      return
+    }
+    if (!urlsCount) {
+      toast.error('Không có URL', { icon: <XCircle className="text-red-600" size={18} /> })
+      return
+    }
+    try {
+      await onehpingSubmitUrls(onehpingApiKey, allUrls, `Crawl ${site.domain}`)
+      onRefreshHistory?.()
+    } catch {
+      // error toast handled inside hook
     }
   }
 
@@ -156,44 +173,58 @@ const ResultCard = ({ site, onRefreshHistory }) => {
           <span>{durationText}</span>
         </div>
 
-        {/* Actions gọn */}
+        {/* Actions */}
         <div className="flex items-center gap-1">
+          {/* Copy */}
           <button
             onClick={handleCopy}
             disabled={!isSuccess || !urlsCount}
-            className="inline-flex items-center justify-center h-8 px-2 rounded-md text-xs bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-blue-400/40"
+            className="inline-flex items-center justify-center h-7 px-2 rounded-md border bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-blue-400/40 transition"
             title={urlsCount ? `Copy ${urlsCountText} URLs` : 'Không có URL'}
           >
-            <Copy size={14} />
+            <Copy size={13} />
           </button>
+
+          {/* Export */}
           <button
             onClick={handleExport}
             disabled={!isSuccess || !urlsCount}
-            className="inline-flex items-center justify-center h-8 px-2 rounded-md text-xs bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-blue-400/40"
+            className="inline-flex items-center justify-center h-7 px-2 rounded-md border bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-blue-400/40 transition"
             title={urlsCount ? `Export ${urlsCountText} URLs` : 'Không có URL'}
           >
-            <FileDown size={14} />
+            <FileDown size={13} />
           </button>
+
+          {/* Sinbyte */}
           <button
-            onClick={handleSubmit}
+            onClick={handleSinbyteSubmit}
             disabled={!isSuccess || !urlsCount || !sinbyteApiKey || isSubmitting}
-            className="inline-flex items-center justify-center h-8 px-2 rounded-md text-xs bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-            title={!sinbyteApiKey ? 'Thiếu API key' : 'Submit lên Sinbyte'}
+            className="inline-flex items-center gap-1 h-7 px-2 rounded-md border bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-1 focus:ring-blue-400/40 transition"
+            title={!sinbyteApiKey ? 'Thiếu API key Sinbyte' : `Submit lên Sinbyte`}
           >
-            <Send size={14} />
+            {sinbyteSubmitting ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+            <span className="text-[10px] font-semibold leading-none">SB</span>
+          </button>
+
+          {/* 1hping */}
+          <button
+            onClick={handle1hpingSubmit}
+            disabled={!isSuccess || !urlsCount || !onehpingApiKey || isSubmitting}
+            className="inline-flex items-center gap-1 h-7 px-2 rounded-md border bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/40 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-1 focus:ring-orange-400/40 transition"
+            title={!onehpingApiKey ? 'Thiếu API key 1hping' : `Submit lên 1hping`}
+          >
+            {onehpingSubmitting ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+            <span className="text-[10px] font-semibold leading-none">1H</span>
           </button>
 
           {/* Toggle details */}
           <button
             onClick={() => setExpanded(v => !v)}
-            className="inline-flex items-center justify-center h-8 px-2 rounded-md text-xs bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400/40"
+            className="inline-flex items-center justify-center h-7 px-2 rounded-md border bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400/40 transition"
             aria-expanded={expanded}
             aria-label="Xem chi tiết"
           >
-            <ChevronDown
-              size={16}
-              className={`transition-transform ${expanded ? 'rotate-180' : ''}`}
-            />
+            <ChevronDown size={14} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
           </button>
         </div>
       </div>

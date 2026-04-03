@@ -4,11 +4,13 @@ import { useSettingsStore } from '../stores/settingsStore'
 import toast from 'react-hot-toast'
 
 const SettingsModal = ({ onClose }) => {
-  const { sinbyteApiKey, setSinbyteApiKey } = useSettingsStore()
+  const { sinbyteApiKey, setSinbyteApiKey, onehpingApiKey, setOnehpingApiKey } = useSettingsStore()
   const [apiKey, setApiKey] = useState(sinbyteApiKey)
+  const [onehpingKey, setOnehpingKey] = useState(onehpingApiKey)
 
   const handleSave = () => {
     setSinbyteApiKey(apiKey)
+    setOnehpingApiKey(onehpingKey)
     toast.success('Đã lưu', {
       icon: <CheckCircle2 className="text-green-600" size={18} />,
     })
@@ -64,9 +66,34 @@ const SettingsModal = ({ onClose }) => {
             </p>
           </div>
 
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              1hping API Key
+            </label>
+            <input
+              type="text"
+              value={onehpingKey}
+              onChange={(e) => setOnehpingKey(e.target.value)}
+              placeholder="jrXr1o61nP9vlBurFKfO44UqdJyvsOYK..."
+              className="w-full border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-orange-400/40 transition"
+            />
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+              Nhập API key từ{' '}
+              <a
+                href="https://app.1hping.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-orange-600 dark:text-orange-400 hover:underline"
+              >
+                1hping
+              </a>{' '}
+              để submit URLs
+            </p>
+          </div>
+
           <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
             <p className="text-xs text-blue-800 dark:text-blue-300">
-              API key được lưu trữ an toàn trên trình duyệt và chỉ được sử dụng để submit URLs lên Sinbyte.
+              API key được lưu trữ an toàn trên trình duyệt và chỉ được sử dụng để submit URLs.
             </p>
           </div>
         </div>

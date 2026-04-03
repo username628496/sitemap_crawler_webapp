@@ -54,8 +54,33 @@ export const crawlAPI = {
       urls
     })
     return response.data
-  }
-  
+  },
+
+  submitTo1hping: async (apikey, urls, campaignName = 'Sitemap Crawler', numberOfDay = 1) => {
+    const response = await api.post('/1hping/campaign/create', {
+      apikey,
+      urls,
+      campaign_name: campaignName,
+      number_of_day: numberOfDay,
+    })
+    return response.data
+  },
+
+  get1hpingBalance: async (apikey) => {
+    const response = await api.get('/1hping/balance', {
+      headers: { 'X-ApiKey': apikey }
+    })
+    return response.data
+  },
+
+  get1hpingCampaigns: async (apikey, page = 1, pageSize = 50) => {
+    const response = await api.get('/1hping/campaign/list', {
+      headers: { 'X-ApiKey': apikey },
+      params: { page, pageSize }
+    })
+    return response.data
+  },
+
 }
 
 

@@ -441,6 +441,90 @@ def sinbyte_submit():
         logger.error(f"Unexpected error in Sinbyte proxy: {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/1hping/campaign/create', methods=['POST'])
+def onehping_campaign_create():
+    """Proxy endpoint for 1hping campaign creation to avoid CORS"""
+    try:
+        data = request.get_json()
+        apikey = data.get('apikey')
+        urls = data.get('urls', [])
+        campaign_name = data.get('campaign_name', 'Sitemap Crawler')
+        number_of_day = data.get('number_of_day', 1)
+
+        if not apikey:
+            return jsonify({"success": False, "message": "Missing API key"}), 400
+        if not urls:
+            return jsonify({"success": False, "message": "Missing URLs"}), 400
+
+        logger.info(f"Proxying 1hping campaign create: {len(urls)} URLs for {campaign_name}")
+
+        response = http_requests.post(
+            'https://app.1hping.com/external/api/campaign/create?culture=vi-VN',
+            headers={'ApiKey': apikey, 'Content-Type': 'application/json'},
+            json={'CampaignName': campaign_name, 'NumberOfDay': number_of_day, 'Urls': urls},
+            timeout=30
+        )
+
+        logger.info(f"1hping campaign create response: {response.status_code}")
+        return jsonify(response.json()), response.status_code
+
+    except http_requests.exceptions.Timeout:
+        return jsonify({"success": False, "message": "Request timeout"}), 504
+    except http_requests.exceptions.RequestException as e:
+        return jsonify({"success": False, "message": str(e)}), 502
+    except Exception as e:
+        logger.error(f"Unexpected error in 1hping proxy: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/1hping/balance', methods=['GET'])
+def onehping_balance():
+    """Proxy endpoint for 1hping balance check"""
+    try:
+        apikey = request.headers.get('X-ApiKey') or request.args.get('apikey')
+        if not apikey:
+            return jsonify({"success": False, "message": "Missing API key"}), 400
+
+        response = http_requests.get(
+            'https://app.1hping.com/external/api/balance',
+            headers={'ApiKey': apikey},
+            timeout=15
+        )
+        return jsonify(response.json()), response.status_code
+
+    except http_requests.exceptions.Timeout:
+        return jsonify({"success": False, "message": "Request timeout"}), 504
+    except http_requests.exceptions.RequestException as e:
+        return jsonify({"success": False, "message": str(e)}), 502
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/1hping/campaign/list', methods=['GET'])
+def onehping_campaign_list():
+    """Proxy endpoint for 1hping campaign list"""
+    try:
+        apikey = request.headers.get('X-ApiKey') or request.args.get('apikey')
+        page = request.args.get('page', 1)
+        page_size = request.args.get('pageSize', 50)
+        if not apikey:
+            return jsonify({"success": False, "message": "Missing API key"}), 400
+
+        response = http_requests.get(
+            f'https://app.1hping.com/external/api/campaign/list?page={page}&pageSize={page_size}',
+            headers={'ApiKey': apikey},
+            timeout=15
+        )
+        return jsonify(response.json()), response.status_code
+
+    except http_requests.exceptions.Timeout:
+        return jsonify({"success": False, "message": "Request timeout"}), 504
+    except http_requests.exceptions.RequestException as e:
+        return jsonify({"success": False, "message": str(e)}), 502
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
 @app.route('/api/gp-content/crawl-stream')
 def gp_content_crawl_stream():
     """
