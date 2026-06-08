@@ -6,9 +6,6 @@ class Config:
     HOST = '0.0.0.0'
     PORT = int(os.getenv('PORT', 8000))
 
-    # Database
-    DATABASE_PATH = os.getenv('DATABASE_PATH', 'crawl_history.db')
-
     # Crawler settings - Optimized for speed
     MAX_WORKERS = int(os.getenv('MAX_WORKERS', 20))  # Tăng từ 10 -> 20
     REQUEST_TIMEOUT = int(os.getenv('REQUEST_TIMEOUT', 15))  # Giảm từ 20s -> 15s
@@ -61,11 +58,6 @@ class Config:
     # Domain validation
     VALIDATE_DOMAIN_MATCH = True  # Log warning nếu redirect sang domain khác
     SKIP_ON_403 = os.getenv('SKIP_ON_403', 'false').lower() == 'true'
-
-    # History settings
-    MAX_SAMPLE_URLS = int(os.getenv('MAX_SAMPLE_URLS', 50))
-    DEFAULT_HISTORY_LIMIT = int(os.getenv('DEFAULT_HISTORY_LIMIT', 20))
-    MAX_HISTORY_LIMIT = int(os.getenv('MAX_HISTORY_LIMIT', 100))
 
     # Timezone
     TIMEZONE = os.getenv('TIMEZONE', 'Asia/Ho_Chi_Minh')

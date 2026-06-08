@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight, AlertTriangle, FileText, Clock, ExternalLink } from 'lucide-react'
 import { formatDuration } from '../utils/formatters'
 
-const SitemapSection = ({ sitemap, index, domain, isExpanded, onToggle }) => {
+const SitemapSection = ({ sitemap, isExpanded, onToggle }) => {
   const urlsCount = sitemap?.urls?.length || 0
   const urlsCountText = urlsCount.toLocaleString()
   const rawDurationSec = Number(sitemap?.duration ?? 0)

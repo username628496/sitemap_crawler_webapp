@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import {
   Globe,
   Copy,
@@ -11,30 +11,56 @@ import {
   Clock,
   Link2,
   ArrowRight,
+  Loader2,
+  MoreHorizontal,
+  KeyRound,
 } from 'lucide-react'
 import { useSinbyte } from '../hooks/useSinbyte'
 import { use1hping } from '../hooks/use1hping'
+import { useInstantIndexer } from '../hooks/useInstantIndexer'
+import { useLinksIndexer } from '../hooks/useLinksIndexer'
+import { useSpeedyIndex } from '../hooks/useSpeedyIndex'
 import { useSettingsStore } from '../stores/settingsStore'
 import toast from 'react-hot-toast'
 import SitemapSection from './SitemapSection'
 
-const ResultCard = ({ site, onRefreshHistory }) => {
+const ResultCard = ({ site }) => {
   const [expanded, setExpanded] = useState(false)
   const [expandedSitemaps, setExpandedSitemaps] = useState({})
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef(null)
   const { isSubmitting: sinbyteSubmitting, submitUrls: sinbyteSubmitUrls } = useSinbyte()
   const { isSubmitting: onehpingSubmitting, submitUrls: onehpingSubmitUrls } = use1hping()
-  const { sinbyteApiKey, onehpingApiKey } = useSettingsStore()
-  const isSubmitting = sinbyteSubmitting || onehpingSubmitting
+  const { isSubmitting: instantSubmitting, submitUrls: instantSubmitUrls } = useInstantIndexer()
+  const { isSubmitting: linksSubmitting, submitUrls: linksSubmitUrls } = useLinksIndexer()
+  const { isSubmitting: speedySubmitting, submitUrls: speedySubmitUrls } = useSpeedyIndex()
+  const {
+    sinbyteApiKey,
+    onehpingApiKey,
+    instantIndexerApiKey,
+    linksIndexerApiKey,
+    speedyIndexApiKey,
+  } = useSettingsStore()
+  const isSubmitting = sinbyteSubmitting || onehpingSubmitting || instantSubmitting || linksSubmitting || speedySubmitting
 
-  if (!site) return null
+  // Đóng menu khi click ra ngoài
+  useEffect(() => {
+    const onClick = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [])
 
   // Gom toàn bộ URL (unique)
   const allUrls = useMemo(() => {
-    if (site.status !== 'success' || !Array.isArray(site.sitemaps)) return []
+    if (!site || site.status !== 'success' || !Array.isArray(site.sitemaps)) return []
     const set = new Set()
     site.sitemaps.forEach(sm => (sm?.urls || []).forEach(u => set.add(u)))
     return Array.from(set)
   }, [site])
+
+  if (!site) return null
 
   const isSuccess = site.status === 'success'
   const urlsCount = allUrls.length
@@ -94,7 +120,6 @@ const ResultCard = ({ site, onRefreshHistory }) => {
     }
     try {
       await sinbyteSubmitUrls(sinbyteApiKey, allUrls, `Crawl ${site.domain}`)
-      onRefreshHistory?.()
     } catch {
       // error toast handled inside hook
     }
@@ -111,10 +136,70 @@ const ResultCard = ({ site, onRefreshHistory }) => {
     }
     try {
       await onehpingSubmitUrls(onehpingApiKey, allUrls, `Crawl ${site.domain}`)
-      onRefreshHistory?.()
     } catch {
       // error toast handled inside hook
     }
+  }
+
+  const handleInstantIndexerSubmit = async () => {
+    if (!instantIndexerApiKey) {
+      toast.error('Chưa có API key InstantIndexer', { icon: <XCircle className="text-red-600" size={18} /> })
+      return
+    }
+    if (!urlsCount) {
+      toast.error('Không có URL', { icon: <XCircle className="text-red-600" size={18} /> })
+      return
+    }
+    try {
+      await instantSubmitUrls(instantIndexerApiKey, allUrls, `Crawl ${site.domain}`)
+    } catch {
+      // error toast handled inside hook
+    }
+  }
+
+  const handleLinksIndexerSubmit = async () => {
+    if (!linksIndexerApiKey) {
+      toast.error('Chưa có API key LinksIndexer', { icon: <XCircle className="text-red-600" size={18} /> })
+      return
+    }
+    if (!urlsCount) {
+      toast.error('Không có URL', { icon: <XCircle className="text-red-600" size={18} /> })
+      return
+    }
+    try {
+      await linksSubmitUrls(linksIndexerApiKey, allUrls, `Crawl ${site.domain}`)
+    } catch {
+      // error toast handled inside hook
+    }
+  }
+
+  const handleSpeedyIndexSubmit = async () => {
+    if (!speedyIndexApiKey) {
+      toast.error('Chưa có API key SpeedyIndex', { icon: <XCircle className="text-red-600" size={18} /> })
+      return
+    }
+    if (!urlsCount) {
+      toast.error('Không có URL', { icon: <XCircle className="text-red-600" size={18} /> })
+      return
+    }
+    try {
+      await speedySubmitUrls(speedyIndexApiKey, allUrls)
+    } catch {
+      // error toast handled inside hook
+    }
+  }
+
+  const submitProviders = [
+    { key: 'sinbyte', label: 'Sinbyte', apiKey: sinbyteApiKey, submitting: sinbyteSubmitting, onSubmit: handleSinbyteSubmit, color: 'text-blue-600 dark:text-blue-400' },
+    { key: 'onehping', label: '1hping', apiKey: onehpingApiKey, submitting: onehpingSubmitting, onSubmit: handle1hpingSubmit, color: 'text-orange-600 dark:text-orange-400' },
+    { key: 'instant', label: 'InstantIndexer', apiKey: instantIndexerApiKey, submitting: instantSubmitting, onSubmit: handleInstantIndexerSubmit, color: 'text-purple-600 dark:text-purple-400' },
+    { key: 'links', label: 'LinksIndexer', apiKey: linksIndexerApiKey, submitting: linksSubmitting, onSubmit: handleLinksIndexerSubmit, color: 'text-teal-600 dark:text-teal-400' },
+    { key: 'speedy', label: 'SpeedyIndex', apiKey: speedyIndexApiKey, submitting: speedySubmitting, onSubmit: handleSpeedyIndexSubmit, color: 'text-indigo-600 dark:text-indigo-400' },
+  ]
+
+  const runMenuAction = (fn) => {
+    setMenuOpen(false)
+    fn()
   }
 
   const toggleSitemap = (idx) => {
@@ -175,47 +260,69 @@ const ResultCard = ({ site, onRefreshHistory }) => {
 
         {/* Actions */}
         <div className="flex items-center gap-1">
-          {/* Copy */}
-          <button
-            onClick={handleCopy}
-            disabled={!isSuccess || !urlsCount}
-            className="inline-flex items-center justify-center h-7 px-2 rounded-md border bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-blue-400/40 transition"
-            title={urlsCount ? `Copy ${urlsCountText} URLs` : 'Không có URL'}
-          >
-            <Copy size={13} />
-          </button>
+          {/* Kebab menu */}
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen(v => !v)}
+              disabled={!isSuccess || !urlsCount}
+              className="inline-flex items-center justify-center h-7 px-2 rounded-md border bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-1 focus:ring-blue-400/40 transition"
+              aria-label="Hành động"
+              aria-expanded={menuOpen}
+              title={urlsCount ? 'Hành động' : 'Không có URL'}
+            >
+              {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : <MoreHorizontal size={14} />}
+            </button>
 
-          {/* Export */}
-          <button
-            onClick={handleExport}
-            disabled={!isSuccess || !urlsCount}
-            className="inline-flex items-center justify-center h-7 px-2 rounded-md border bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-blue-400/40 transition"
-            title={urlsCount ? `Export ${urlsCountText} URLs` : 'Không có URL'}
-          >
-            <FileDown size={13} />
-          </button>
+            {menuOpen && (
+              <div className="absolute right-0 mt-1 w-52 z-20 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg overflow-hidden">
+                {/* Copy + Export */}
+                <button
+                  onClick={() => runMenuAction(handleCopy)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+                >
+                  <Copy size={13} className="text-gray-400" />
+                  Copy {urlsCountText} URLs
+                </button>
+                <button
+                  onClick={() => runMenuAction(handleExport)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+                >
+                  <FileDown size={13} className="text-gray-400" />
+                  Export CSV
+                </button>
 
-          {/* Sinbyte */}
-          <button
-            onClick={handleSinbyteSubmit}
-            disabled={!isSuccess || !urlsCount || !sinbyteApiKey || isSubmitting}
-            className="inline-flex items-center gap-1 h-7 px-2 rounded-md border bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-1 focus:ring-blue-400/40 transition"
-            title={!sinbyteApiKey ? 'Thiếu API key Sinbyte' : `Submit lên Sinbyte`}
-          >
-            {sinbyteSubmitting ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-            <span className="text-[10px] font-semibold leading-none">SB</span>
-          </button>
+                <div className="border-t border-gray-100 dark:border-gray-800" />
+                <div className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                  Submit index
+                </div>
 
-          {/* 1hping */}
-          <button
-            onClick={handle1hpingSubmit}
-            disabled={!isSuccess || !urlsCount || !onehpingApiKey || isSubmitting}
-            className="inline-flex items-center gap-1 h-7 px-2 rounded-md border bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/40 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-1 focus:ring-orange-400/40 transition"
-            title={!onehpingApiKey ? 'Thiếu API key 1hping' : `Submit lên 1hping`}
-          >
-            {onehpingSubmitting ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-            <span className="text-[10px] font-semibold leading-none">1H</span>
-          </button>
+                {submitProviders.map(p => {
+                  const hasKey = !!p.apiKey
+                  return (
+                    <button
+                      key={p.key}
+                      onClick={() => runMenuAction(p.onSubmit)}
+                      disabled={!hasKey || isSubmitting}
+                      className="w-full flex items-center justify-between gap-2 px-3 py-2 text-xs text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                      title={hasKey ? `Submit lên ${p.label}` : `Thiếu API key ${p.label}`}
+                    >
+                      <span className="flex items-center gap-2">
+                        {p.submitting
+                          ? <Loader2 size={13} className="animate-spin text-gray-400" />
+                          : <Send size={13} className={p.color} />}
+                        {p.label}
+                      </span>
+                      {!hasKey && (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400">
+                          <KeyRound size={11} /> thiếu key
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Toggle details */}
           <button
@@ -314,8 +421,6 @@ const ResultCard = ({ site, onRefreshHistory }) => {
                       <SitemapSection
                         key={`${site.domain}-sm-${idx}`}
                         sitemap={sm}
-                        index={idx}
-                        domain={site.domain}
                         isExpanded={!!expandedSitemaps[idx]}
                         onToggle={() => toggleSitemap(idx)}
                       />

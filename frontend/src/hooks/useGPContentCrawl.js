@@ -19,8 +19,6 @@ export const useGPContentCrawl = () => {
       return
     }
 
-    console.log('[GP Content] Starting crawl for', domains.length, 'domains')
-
     setIsLoading(true)
     setResults([])
     setProgress({ current: 0, total: 0 })
@@ -37,11 +35,9 @@ export const useGPContentCrawl = () => {
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
-        console.log('[GP Content] Received:', data)
 
         // Handle status messages
         if (data.status === 'starting') {
-          console.log('[GP Content] Starting...')
           toast.success(`Bắt đầu crawl ${data.total_domains} domains`, {
             icon: createElement(Rocket, { className: "text-blue-600", size: 18 })
           })
@@ -77,7 +73,6 @@ export const useGPContentCrawl = () => {
         }
 
         if (data.status === 'completed') {
-          console.log('[GP Content] All done!')
           eventSource.close()
           setIsLoading(false)
           setCurrentDomain('')
@@ -117,8 +112,6 @@ export const useGPContentCrawl = () => {
               total: data.progress.total || 0
             })
           }
-
-          console.log('[GP Content] Added result:', data.url, `(${tempResults.length} total)`)
         }
 
       } catch (error) {

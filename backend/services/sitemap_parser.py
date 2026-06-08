@@ -1,10 +1,9 @@
 import requests
-import cloudscraper
 import xml.etree.ElementTree as ET
 from urllib.parse import urljoin, urlparse
 from typing import List, Tuple, Set, Optional
 from time import time, sleep
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 import gzip
 from config import Config
 from utils.logger import logger
@@ -305,7 +304,7 @@ class SitemapParser:
                     content = self._decompress_if_needed(response)
                     return content, chain
                 else:
-                    # Fast path: use cloudscraper (bypasses Cloudflare automatically)
+                    # Fast path: standard requests session
                     response = self.session.get(
                         url,
                         timeout=self.timeout,

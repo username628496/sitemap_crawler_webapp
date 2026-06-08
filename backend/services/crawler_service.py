@@ -9,14 +9,12 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import Config
 from utils.logger import logger
 from services.sitemap_parser import SitemapParser
-from models.database import DatabaseManager
 
 
 class CrawlerService:
-    def __init__(self, db_manager: DatabaseManager = None):
+    def __init__(self):
         self.config = Config()
         self.parser = SitemapParser()
-        self.db = db_manager or DatabaseManager()
 
     # ============================================================
     # Xử lý 1 domain duy nhất
@@ -94,18 +92,6 @@ class CrawlerService:
             total_duration = time.time() - start_time
             total_urls = len(all_urls)
 
-            # Lưu kết quả vào DB (including redirect chains)
-            session_id = self.db.save_crawl_session(
-                domain=final_domain,
-                original_domain=domain_clean,  # Save original domain
-                status="success",
-                total_urls=total_urls,
-                duration=total_duration,
-                sitemaps_data=sitemaps_data,
-                sample_urls=list(all_urls)[:100],
-                redirect_chains=all_redirect_chains,  # Pass redirect chains
-            )
-
             # Prepare redirect summary for response
             redirect_summary = None
             if all_redirect_chains:
@@ -128,7 +114,6 @@ class CrawlerService:
                 "total_urls": total_urls,
                 "duration": total_duration,
                 "sitemaps": sitemaps_data,
-                "session_id": session_id,
             }
 
             # Add redirect info if present
@@ -141,15 +126,6 @@ class CrawlerService:
         except Exception as e:
             total_duration = time.time() - start_time
             logger.error(f"💥 Crawl thất bại cho {domain}: {e}")
-
-            # Lưu phiên thất bại
-            self.db.save_crawl_session(
-                domain=domain,
-                status="failed",
-                duration=total_duration,
-                error_message=str(e),
-                sitemaps_data=sitemaps_data,
-            )
 
             return {
                 "domain": domain,

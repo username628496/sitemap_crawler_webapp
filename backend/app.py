@@ -1,8 +1,6 @@
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 import json
-import csv
-from io import StringIO
 import sys
 import os
 import requests as http_requests
@@ -21,8 +19,6 @@ from config import config, Config
 from utils.logger import logger
 from services.crawler_service import CrawlerService
 from services.content_crawler_service import ContentCrawlerService
-from services.history_service import HistoryService
-from models.database import DatabaseManager
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -46,10 +42,8 @@ app_config = config.get(os.getenv('FLASK_ENV', 'default'))
 app.config.from_object(app_config)
 
 # Initialize services
-db_manager = DatabaseManager()
-crawler_service = CrawlerService(db_manager)
+crawler_service = CrawlerService()
 content_crawler_service = ContentCrawlerService()
-history_service = HistoryService(db_manager)
 
 logger.info("✅ Application initialized with Sync Crawler (requests)")
 logger.info("Application initialized successfully")
@@ -74,20 +68,6 @@ def health_check():
         "timestamp": datetime.now().isoformat(),
         "components": {}
     }
-
-    # Check database connection
-    try:
-        stats = history_service.get_statistics(days=1)
-        health_status["components"]["database"] = {
-            "status": "ok",
-            "total_sessions": stats.get("total_sessions", 0)
-        }
-    except Exception as e:
-        health_status["status"] = "unhealthy"
-        health_status["components"]["database"] = {
-            "status": "error",
-            "error": str(e)
-        }
 
     # Check configuration
     health_status["components"]["config"] = {
@@ -223,177 +203,6 @@ def crawl_stream():
     response.headers['X-Accel-Buffering'] = 'no'
     return response
 
-@app.route('/api/history')
-def get_history():
-    """Get crawl history with filters"""
-    try:
-        limit = min(int(request.args.get("limit", Config.DEFAULT_HISTORY_LIMIT)), Config.MAX_HISTORY_LIMIT)
-        offset = max(int(request.args.get("offset", 0)), 0)
-        domain_filter = request.args.get("domain")
-        status_filter = request.args.get("status")
-        date_from = request.args.get("date_from")
-        date_to = request.args.get("date_to")
-        
-        result = history_service.get_history(
-            limit=limit,
-            offset=offset,
-            domain_filter=domain_filter,
-            status_filter=status_filter,
-            date_from=date_from,
-            date_to=date_to
-        )
-        
-        return jsonify(result)
-        
-    except Exception as e:
-        logger.error(f"Error in /api/history: {e}")
-        return jsonify({
-            "error": "Không thể tải lịch sử crawl",
-            "message": "Đã xảy ra lỗi khi đọc dữ liệu từ database",
-            "suggestion": "Vui lòng thử lại hoặc kiểm tra logs",
-            "details": str(e)
-        }), 500
-
-@app.route('/api/history/statistics')
-def get_statistics():
-    """Get crawl statistics"""
-    try:
-        days = min(int(request.args.get("days", 30)), 365)
-        stats = history_service.get_statistics(days=days)
-        return jsonify(stats)
-        
-    except Exception as e:
-        logger.error(f"Error in /api/history/statistics: {e}")
-        return jsonify({"error": f"Lỗi tạo thống kê: {str(e)}"}), 500
-
-@app.route('/api/history/compare/<domain>')
-def compare_domain(domain):
-    """Compare recent crawls for a domain"""
-    try:
-        limit = min(int(request.args.get("limit", 5)), 20)
-        comparison = history_service.compare_domain(domain, limit)
-        return jsonify(comparison)
-        
-    except Exception as e:
-        logger.error(f"Error in /api/history/compare: {e}")
-        return jsonify({"error": f"Lỗi so sánh: {str(e)}"}), 500
-
-@app.route('/api/history/export')
-def export_history():
-    """Export crawl history to CSV"""
-    try:
-        export_format = request.args.get("format", "csv")
-        days = min(int(request.args.get("days", 30)), 365)
-
-        if export_format == "json":
-            history_data = history_service.get_history(limit=1000, offset=0)
-            return jsonify(history_data)
-
-        # CSV export
-        csv_data = history_service.export_to_csv(days=days)
-
-        return Response(
-            csv_data,
-            mimetype="text/csv",
-            headers={"Content-Disposition": "attachment; filename=crawl_history.csv"}
-        )
-
-    except Exception as e:
-        logger.error(f"Error in /api/history/export: {e}")
-        return jsonify({"error": f"Lỗi export: {str(e)}"}), 500
-
-# ─── GP Content History Endpoints ──────────────────────────────────────
-
-@app.route('/api/gp-content/history')
-def get_gp_content_history():
-    """Get GP Content crawl history with filters"""
-    try:
-        limit = min(int(request.args.get("limit", Config.DEFAULT_HISTORY_LIMIT)), Config.MAX_HISTORY_LIMIT)
-        offset = max(int(request.args.get("offset", 0)), 0)
-        domain_filter = request.args.get("domain")
-        status_filter = request.args.get("status")
-        date_from = request.args.get("date_from")
-        date_to = request.args.get("date_to")
-        include_urls = request.args.get("include_urls", "false").lower() == "true"
-
-        result = history_service.get_gp_content_history(
-            limit=limit,
-            offset=offset,
-            domain_filter=domain_filter,
-            status_filter=status_filter,
-            date_from=date_from,
-            date_to=date_to,
-            include_urls=include_urls
-        )
-
-        return jsonify(result)
-
-    except ValueError as e:
-        logger.error(f"Validation error in /api/gp-content/history: {e}")
-        return jsonify({"error": f"Invalid parameters: {str(e)}"}), 400
-    except Exception as e:
-        logger.error(f"Error in /api/gp-content/history: {e}")
-        return jsonify({
-            "error": f"Lỗi lấy lịch sử GP Content: {str(e)}",
-            "results": [],
-            "total": 0
-        }), 500
-
-@app.route('/api/gp-content/history/<int:session_id>')
-def get_gp_content_session_details(session_id):
-    """Get detailed URLs for a specific GP Content session"""
-    try:
-        result = history_service.get_gp_content_history(
-            limit=1,
-            offset=0,
-            include_urls=True
-        )
-
-        # Find the specific session
-        session = next((s for s in result['results'] if s['id'] == session_id), None)
-
-        if not session:
-            return jsonify({"error": "Session not found"}), 404
-
-        return jsonify(session)
-
-    except Exception as e:
-        logger.error(f"Error in /api/gp-content/history/{session_id}: {e}")
-        return jsonify({"error": f"Lỗi lấy chi tiết session: {str(e)}"}), 500
-
-# ─────────────────────────────────────────────────────────────────────────
-
-@app.route('/api/export', methods=['POST'])
-def export_urls():
-    """Export URLs to CSV"""
-    try:
-        data = request.get_json()
-        urls = data.get("urls", [])
-        export_type = data.get("type", "csv")
-        
-        if export_type == "txt":
-            return Response(
-                "\n".join(urls),
-                mimetype="text/plain",
-                headers={"Content-Disposition": "attachment; filename=urls.txt"}
-            )
-        
-        # CSV export
-        output = StringIO()
-        writer = csv.writer(output)
-        writer.writerow(["URL"])
-        for url in urls:
-            writer.writerow([url])
-        
-        return Response(
-            output.getvalue(),
-            mimetype="text/csv",
-            headers={"Content-Disposition": "attachment; filename=urls.csv"}
-        )
-        
-    except Exception as e:
-        logger.error(f"Error in /api/export: {e}")
-        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/sinbyte/submit', methods=['POST'])
 def sinbyte_submit():
@@ -513,6 +322,187 @@ def onehping_campaign_list():
         response = http_requests.get(
             f'https://app.1hping.com/external/api/campaign/list?page={page}&pageSize={page_size}',
             headers={'ApiKey': apikey},
+            timeout=15
+        )
+        return jsonify(response.json()), response.status_code
+
+    except http_requests.exceptions.Timeout:
+        return jsonify({"success": False, "message": "Request timeout"}), 504
+    except http_requests.exceptions.RequestException as e:
+        return jsonify({"success": False, "message": str(e)}), 502
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/instantindexer/submit', methods=['POST'])
+def instantindexer_submit():
+    """Proxy endpoint for InstantIndexer to avoid CORS"""
+    try:
+        data = request.get_json()
+        apikey = data.get('apikey')
+        urls = data.get('urls', [])
+        project = data.get('project', 'Sitemap Crawler')
+        instant = data.get('instant', False)
+
+        if not apikey:
+            return jsonify({"success": False, "message": "Missing API key"}), 400
+        if not urls:
+            return jsonify({"success": False, "message": "Missing URLs"}), 400
+
+        logger.info(f"Proxying InstantIndexer submit: {len(urls)} URLs for {project}")
+
+        response = http_requests.post(
+            'https://instantindexer.org/api/submit.php',
+            headers={'X-API-Key': apikey, 'Content-Type': 'application/json'},
+            json={'project': project, 'urls': urls, 'instant': instant},
+            timeout=30
+        )
+
+        logger.info(f"InstantIndexer submit response: {response.status_code}")
+        return jsonify(response.json()), response.status_code
+
+    except http_requests.exceptions.Timeout:
+        return jsonify({"success": False, "message": "Request timeout"}), 504
+    except http_requests.exceptions.RequestException as e:
+        return jsonify({"success": False, "message": str(e)}), 502
+    except Exception as e:
+        logger.error(f"Unexpected error in InstantIndexer proxy: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/instantindexer/balance', methods=['GET'])
+def instantindexer_balance():
+    """Proxy endpoint for InstantIndexer balance check"""
+    try:
+        apikey = request.headers.get('X-ApiKey') or request.args.get('apikey')
+        if not apikey:
+            return jsonify({"success": False, "message": "Missing API key"}), 400
+
+        response = http_requests.get(
+            'https://instantindexer.org/api/balance.php',
+            headers={'X-API-Key': apikey},
+            timeout=15
+        )
+        return jsonify(response.json()), response.status_code
+
+    except http_requests.exceptions.Timeout:
+        return jsonify({"success": False, "message": "Request timeout"}), 504
+    except http_requests.exceptions.RequestException as e:
+        return jsonify({"success": False, "message": str(e)}), 502
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/linksindexer/submit', methods=['POST'])
+def linksindexer_submit():
+    """Proxy endpoint for LinksIndexer to avoid CORS"""
+    try:
+        data = request.get_json()
+        apikey = data.get('apikey')
+        urls = data.get('urls', [])
+        campaign_name = data.get('campaign_name', 'Sitemap Crawler')
+        dripfeed = data.get('dripfeed', 0)
+
+        if not apikey:
+            return jsonify({"success": False, "message": "Missing API key"}), 400
+        if not urls:
+            return jsonify({"success": False, "message": "Missing URLs"}), 400
+
+        logger.info(f"Proxying LinksIndexer submit: {len(urls)} URLs for {campaign_name}")
+
+        # LinksIndexer dùng form-urlencoded, URL phân cách bằng pipe
+        response = http_requests.post(
+            'https://linksindexer.com/api/campaign/create',
+            data={
+                'api_token': apikey,
+                'urls': '|'.join(urls),
+                'campaign_name': campaign_name,
+                'dripfeed': dripfeed,
+            },
+            timeout=30
+        )
+
+        logger.info(f"LinksIndexer submit response: {response.status_code}")
+        return jsonify(response.json()), response.status_code
+
+    except http_requests.exceptions.Timeout:
+        return jsonify({"success": False, "message": "Request timeout"}), 504
+    except http_requests.exceptions.RequestException as e:
+        return jsonify({"success": False, "message": str(e)}), 502
+    except Exception as e:
+        logger.error(f"Unexpected error in LinksIndexer proxy: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/linksindexer/credits', methods=['GET'])
+def linksindexer_credits():
+    """Proxy endpoint for LinksIndexer credits check"""
+    try:
+        apikey = request.headers.get('X-ApiKey') or request.args.get('apikey')
+        if not apikey:
+            return jsonify({"success": False, "message": "Missing API key"}), 400
+
+        response = http_requests.post(
+            'https://linksindexer.com/api/credits',
+            data={'api_token': apikey},
+            timeout=15
+        )
+        return jsonify(response.json()), response.status_code
+
+    except http_requests.exceptions.Timeout:
+        return jsonify({"success": False, "message": "Request timeout"}), 504
+    except http_requests.exceptions.RequestException as e:
+        return jsonify({"success": False, "message": str(e)}), 502
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/speedyindex/submit', methods=['POST'])
+def speedyindex_submit():
+    """Proxy endpoint for SpeedyIndex to avoid CORS"""
+    try:
+        data = request.get_json()
+        apikey = data.get('apikey')
+        urls = data.get('urls', [])
+
+        if not apikey:
+            return jsonify({"success": False, "message": "Missing API key"}), 400
+        if not urls:
+            return jsonify({"success": False, "message": "Missing URLs"}), 400
+
+        logger.info(f"Proxying SpeedyIndex submit: {len(urls)} URLs")
+
+        # Google indexer hiện chỉ chấp nhận pay_per_indexed: true
+        response = http_requests.post(
+            'https://api.speedyindex.com/v2/task/google/indexer/create',
+            headers={'Authorization': apikey, 'Content-Type': 'application/json'},
+            json={'urls': urls, 'pay_per_indexed': True},
+            timeout=30
+        )
+
+        logger.info(f"SpeedyIndex submit response: {response.status_code}")
+        return jsonify(response.json()), response.status_code
+
+    except http_requests.exceptions.Timeout:
+        return jsonify({"success": False, "message": "Request timeout"}), 504
+    except http_requests.exceptions.RequestException as e:
+        return jsonify({"success": False, "message": str(e)}), 502
+    except Exception as e:
+        logger.error(f"Unexpected error in SpeedyIndex proxy: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/speedyindex/balance', methods=['GET'])
+def speedyindex_balance():
+    """Proxy endpoint for SpeedyIndex balance check"""
+    try:
+        apikey = request.headers.get('X-ApiKey') or request.args.get('apikey')
+        if not apikey:
+            return jsonify({"success": False, "message": "Missing API key"}), 400
+
+        response = http_requests.get(
+            'https://api.speedyindex.com/v2/account',
+            headers={'Authorization': apikey},
             timeout=15
         )
         return jsonify(response.json()), response.status_code

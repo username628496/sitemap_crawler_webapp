@@ -8,6 +8,12 @@ export const useSettingsStore = create(
       setSinbyteApiKey: (key) => set({ sinbyteApiKey: key }),
       onehpingApiKey: '',
       setOnehpingApiKey: (key) => set({ onehpingApiKey: key }),
+      instantIndexerApiKey: '',
+      setInstantIndexerApiKey: (key) => set({ instantIndexerApiKey: key }),
+      linksIndexerApiKey: '',
+      setLinksIndexerApiKey: (key) => set({ linksIndexerApiKey: key }),
+      speedyIndexApiKey: '',
+      setSpeedyIndexApiKey: (key) => set({ speedyIndexApiKey: key }),
     }),
     {
       name: 'crawler-settings',

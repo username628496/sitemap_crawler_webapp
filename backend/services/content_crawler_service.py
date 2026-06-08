@@ -11,7 +11,6 @@ from typing import Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlparse, urlunparse
 
 from config import Config
-from models.database import DatabaseManager
 from services.sitemap_parser import SitemapParser
 from utils.html_parser import HTMLParser
 from utils.logger import logger
@@ -19,7 +18,7 @@ from utils.logger import logger
 
 class ContentCrawlerService:
 
-    def __init__(self, db: DatabaseManager = None):
+    def __init__(self):
         self.timeout = Config.REQUEST_TIMEOUT
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -29,7 +28,6 @@ class ContentCrawlerService:
         self.max_workers = 5
         self.sitemap_parser = SitemapParser()
         self.html_parser = HTMLParser()
-        self.db = db or DatabaseManager()
 
     def crawl_single_url(
         self,
@@ -169,22 +167,6 @@ class ContentCrawlerService:
             duration = time() - start_time
             logger.info(f"✅ Done {domain}: {len(results)}/{total_urls} URLs in {duration:.1f}s")
 
-            # Save to database
-            session_id = self.db.save_gp_content_session(
-                domain=original_domain,
-                original_domain=original_domain,
-                target_domain=target_domain,
-                has_redirect=has_redirect,
-                status='success',
-                total_urls=total_urls,
-                crawled_urls=len(results),
-                duration=round(duration, 2),
-                url_results=results
-            )
-
-            if session_id:
-                logger.info(f"💾 Saved GP Content session {session_id} to database")
-
             return {
                 'domain': domain,
                 'original_domain': original_domain,
@@ -195,26 +177,10 @@ class ContentCrawlerService:
                 'crawled_urls': len(results),
                 'results': results,
                 'duration': round(duration, 2),
-                'session_id': session_id
             }
 
         except Exception as e:
             logger.error(f"❌ [GP Content] {domain}: {e}")
-
-            # Save failed session to database
-            duration = time() - start_time
-            self.db.save_gp_content_session(
-                domain=domain,
-                original_domain=domain,
-                target_domain=domain,
-                has_redirect=False,
-                status='failed',
-                total_urls=0,
-                crawled_urls=0,
-                duration=round(duration, 2),
-                error_message=str(e)
-            )
-
             return self._error(domain, str(e))
 
     def process_domains(

@@ -14,7 +14,6 @@ Lý do og:title là đầu tiên:
 
 import re
 import warnings
-from typing import Dict
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
@@ -118,12 +117,3 @@ class HTMLParser:
         slug = path.split('/')[-1]
         slug = re.sub(r'\.\w+$', '', slug)
         return slug.replace('-', ' ').title()
-
-    @staticmethod
-    def parse_page(url: str, html_content: str) -> Dict[str, str]:
-        """Parse page và trả về tất cả metadata."""
-        return {
-            'url': url,
-            'title': HTMLParser.extract_title_from_html(html_content),
-            'keywords': HTMLParser.extract_keywords_from_html(html_content, url),
-        }
